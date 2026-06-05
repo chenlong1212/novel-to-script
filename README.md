@@ -14,7 +14,7 @@
 
 ## 项目状态
 
-**当前版本：v0.1.0**
+**当前版本：v0.4.0**
 
 已完成：
 - ✅ YAML Schema 定义文档
@@ -22,11 +22,18 @@
 - ✅ 配置文件设计
 - ✅ 数据模型（Script、Character、Scene、Beat等）
 - ✅ 基础工具函数（IDGenerator）
+- ✅ DeepSeek API 客户端
+- ✅ 小说文件读取器
+- ✅ 核心转换逻辑
+- ✅ 命令行接口
+- ✅ 智能人物识别
+- ✅ 对话提取和情绪检测
+- ✅ 人物关系分析
+- ✅ 分析管理器
+- ✅ 场景分割（v0.4新增）
+- ✅ 情绪标注增强（v0.4新增）
 
 后续版本计划：
-- v0.2: 基础转换能力
-- v0.3: 人物识别 + 对话提取
-- v0.4: 场景分割 + 情绪标注
 - v0.5: 批量处理 + 质量优化
 - v1.0: 完整功能 + 生产就绪
 
@@ -45,6 +52,21 @@ novel-to-script/
 │   │   │   │   ├── Scene.java
 │   │   │   │   ├── Beat.java
 │   │   │   │   └── ...
+│   │   │   ├── analyzer/            # 分析器
+│   │   │   │   ├── CharacterAnalyzer.java  # 人物识别
+│   │   │   │   ├── DialogueExtractor.java  # 对话提取
+│   │   │   │   ├── RelationshipAnalyzer.java # 关系分析
+│   │   │   │   ├── SceneSplitter.java      # 场景分割
+│   │   │   │   ├── EmotionAnnotator.java   # 情绪标注
+│   │   │   │   └── AnalysisManager.java    # 分析管理
+│   │   │   ├── client/              # API 客户端
+│   │   │   │   └── DeepSeekClient.java
+│   │   │   ├── converter/           # 转换器
+│   │   │   │   └── NovelToScriptConverter.java
+│   │   │   ├── reader/              # 文件读取器
+│   │   │   │   └── NovelReader.java
+│   │   │   ├── cli/                 # 命令行接口
+│   │   │   │   └── ScriptConverterCLI.java
 │   │   │   ├── util/                # 工具类
 │   │   │   │   └── IDGenerator.java
 │   │   │   └── Novel2ScriptApplication.java
@@ -84,6 +106,12 @@ mvn test
 
 ```bash
 mvn spring-boot:run
+```
+
+### 运行命令行界面（CLI）
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.profiles=cli
 ```
 
 ### 配置
@@ -167,6 +195,73 @@ script:
 | `Beat.Intensity` | 情绪强度（low/medium/high） |
 | `Relationship.RelationshipType` | 关系类型（family/friend/colleague/lover/enemy/superior/subordinate/acquaintance/stranger） |
 
+## 核心功能
+
+### 1. 小说文件读取（v0.2）
+
+```java
+NovelReader reader = new NovelReader();
+String text = reader.readNovel("examples/input/sample.txt");
+List<String> paragraphs = reader.splitIntoParagraphs(text);
+NovelReader.NovelMetadata metadata = reader.extractMetadata(text);
+```
+
+### 2. DeepSeek API 调用（v0.2）
+
+```java
+DeepSeekClient client = new DeepSeekClient(config);
+String response = client.chat("系统提示词", "用户输入");
+boolean connected = client.testConnection();
+```
+
+### 3. 人物识别（v0.3）
+
+```java
+CharacterAnalyzer analyzer = new CharacterAnalyzer();
+List<CharacterAnalyzer.CharacterInfo> characters = analyzer.analyzeCharacters(text);
+```
+
+### 4. 对话提取（v0.3）
+
+```java
+DialogueExtractor extractor = new DialogueExtractor();
+List<DialogueExtractor.DialogueInfo> dialogues = extractor.extractDialogues(text);
+DialogueExtractor.DialogueStatistics stats = extractor.calculateStatistics(dialogues);
+```
+
+### 5. 关系分析（v0.3）
+
+```java
+RelationshipAnalyzer analyzer = new RelationshipAnalyzer();
+List<RelationshipAnalyzer.RelationshipInfo> relationships = 
+    analyzer.analyzeRelationships(text, characterNames);
+```
+
+### 6. 场景分割（v0.4）
+
+```java
+SceneSplitter splitter = new SceneSplitter();
+List<SceneSplitter.SceneInfo> scenes = splitter.splitScenes(text);
+```
+
+### 7. 情绪标注（v0.4）
+
+```java
+EmotionAnnotator annotator = new EmotionAnnotator();
+Beat.Emotion emotion = annotator.analyzeEmotion(dialogueText);
+Beat.Intensity intensity = annotator.analyzeIntensity(dialogueText, emotion);
+String description = annotator.getEmotionDescription(emotion);
+String emoji = annotator.getEmotionEmoji(emotion);
+```
+
+### 8. 完整分析（v0.3+）
+
+```java
+AnalysisManager manager = new AnalysisManager();
+AnalysisManager.AnalysisResult result = manager.analyze(text);
+Script script = result.getScript();
+```
+
 ## 使用示例
 
 ```java
@@ -200,6 +295,9 @@ mvn test -Dtest=IDGeneratorTest
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v0.4.0 | 2026-06-05 | 场景分割 + 情绪标注 |
+| v0.3.0 | 2026-06-05 | 人物识别 + 对话提取 + 关系分析 |
+| v0.2.0 | 2026-06-05 | 基础转换能力（DeepSeek API、小说读取、转换器、CLI） |
 | v0.1.0 | 2026-06-05 | Java项目初始化，Schema定义，数据模型 |
 
 ## 许可证
