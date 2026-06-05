@@ -1,0 +1,70 @@
+# AI 小说转剧本工具配置文件
+# 版本: v0.1.0
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: novel-to-script
+
+# 项目配置
+novel2script:
+  schema:
+    version: "1.0"
+    character-prefix: "char_"
+    scene-prefix: "scene_"
+  
+  ai:
+    provider: "deepseek"
+    model: "deepseek-chat"
+    api-key: "${DEEPSEEK_API_KEY}"
+    api-url: "https://api.deepseek.com/v1/chat/completions"
+    temperature: 0.7
+    max-tokens: 4096
+  
+  conversion:
+    scene:
+      min-length: 100
+      location-keywords:
+        - "来到"
+        - "走进"
+        - "回到"
+        - "离开"
+        - "到达"
+      time-keywords:
+        - "第二天"
+        - "傍晚"
+        - "清晨"
+        - "中午"
+        - "晚上"
+        - "三天后"
+        - "一周后"
+    
+    character:
+      protagonist-threshold: 10
+      supporting-threshold: 3
+    
+    emotion:
+      enabled: true
+      keywords:
+        happy: ["开心", "高兴", "快乐", "笑", "哈哈"]
+        sad: ["难过", "伤心", "悲伤", "哭", "眼泪"]
+        angry: ["生气", "愤怒", "火大", "拍桌"]
+        surprised: ["惊讶", "吃惊", "没想到"]
+        fearful: ["害怕", "恐惧", "担心"]
+  
+  output:
+    format: "yaml"
+    encoding: "UTF-8"
+    include-source: false
+    generate-report: true
+
+# 日志配置
+logging:
+  level:
+    com.example.novel2script: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/novel-to-script.log

@@ -1,0 +1,211 @@
+# AI 小说转剧本工具
+
+> 将小说文本自动转换为结构化剧本（YAML格式），帮助作者快速获得可编辑的剧本初稿。
+
+## 技术栈
+
+| 分类 | 技术 | 版本 |
+|------|------|------|
+| 语言 | Java | 17 (LTS) |
+| 框架 | Spring Boot | 3.2.x |
+| YAML处理 | SnakeYAML | 2.2 |
+| 构建工具 | Maven | 3.9+ |
+| 测试 | JUnit 5 | 5.10+ |
+
+## 项目状态
+
+**当前版本：v0.1.0**
+
+已完成：
+- ✅ YAML Schema 定义文档
+- ✅ 项目基础结构（Spring Boot）
+- ✅ 配置文件设计
+- ✅ 数据模型（Script、Character、Scene、Beat等）
+- ✅ 基础工具函数（IDGenerator）
+
+后续版本计划：
+- v0.2: 基础转换能力
+- v0.3: 人物识别 + 对话提取
+- v0.4: 场景分割 + 情绪标注
+- v0.5: 批量处理 + 质量优化
+- v1.0: 完整功能 + 生产就绪
+
+## 项目结构
+
+```
+novel-to-script/
+├── src/
+│   ├── main/
+│   │   ├── java/com/example/novel2script/
+│   │   │   ├── config/              # 配置类
+│   │   │   │   └── ApplicationConfig.java
+│   │   │   ├── model/               # 数据模型
+│   │   │   │   ├── Script.java
+│   │   │   │   ├── Character.java
+│   │   │   │   ├── Scene.java
+│   │   │   │   ├── Beat.java
+│   │   │   │   └── ...
+│   │   │   ├── util/                # 工具类
+│   │   │   │   └── IDGenerator.java
+│   │   │   └── Novel2ScriptApplication.java
+│   │   └── resources/
+│   │       └── application.yml       # 应用配置
+│   └── test/                        # 单元测试
+├── docs/
+│   └── yaml-schema.md               # Schema定义文档
+├── examples/
+│   ├── input/                       # 示例小说
+│   └── output/                      # 示例输出
+├── pom.xml                          # Maven配置
+└── README.md                        # 项目文档
+```
+
+## 快速开始
+
+### 环境要求
+
+- JDK 17+
+- Maven 3.9+
+
+### 构建项目
+
+```bash
+cd novel-to-script
+mvn clean compile
+```
+
+### 运行测试
+
+```bash
+mvn test
+```
+
+### 运行应用
+
+```bash
+mvn spring-boot:run
+```
+
+### 配置
+
+1. **配置文件** `src/main/resources/application.yml`：
+
+```yaml
+novel2script:
+  ai:
+    provider: "deepseek"
+    model: "deepseek-chat"
+    api-key: "${DEEPSEEK_API_KEY}"
+    api-url: "https://api.deepseek.com/v1/chat/completions"
+```
+
+2. **环境变量配置**：
+
+方法一：使用 `.env` 文件（推荐）
+
+复制 `.env.example` 为 `.env`：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件：
+
+```env
+DEEPSEEK_API_KEY=your-deepseek-api-key-here
+```
+
+方法二：手动设置环境变量
+
+```bash
+# Linux/Mac
+export DEEPSEEK_API_KEY=your-api-key
+
+# Windows (PowerShell)
+$env:DEEPSEEK_API_KEY="your-api-key"
+```
+
+**注意：** `.env` 文件已添加到 `.gitignore`，不会被提交到 Git 仓库。
+
+## YAML Schema
+
+剧本输出的 YAML 结构遵循 [yaml-schema.md](docs/yaml-schema.md) 定义的规范。
+
+### 核心结构
+
+```yaml
+script:
+  schema_version: "1.0"
+  meta:           # 元信息
+  characters:     # 人物列表
+  scenes:         # 场景列表
+  relationships:  # 人物关系（可选）
+```
+
+### 数据模型
+
+| 模型类 | 说明 |
+|--------|------|
+| `Script` | 剧本根对象 |
+| `MetaInformation` | 元信息（标题、作者、版本等） |
+| `Character` | 人物（ID、名称、角色类型等） |
+| `Scene` | 场景（地点、时间、节拍列表） |
+| `Beat` | 场景节拍（动作/对话/旁白/转场） |
+| `Location` | 地点信息 |
+| `TimeSetting` | 时间设置 |
+| `Relationship` | 人物关系 |
+
+### 枚举类型
+
+| 枚举 | 说明 |
+|------|------|
+| `Character.Role` | 角色类型（protagonist/antagonist/supporting/minor/cameo） |
+| `Location.LocationType` | 地点类型（fixed/public/private/outdoor/virtual） |
+| `TimeSetting.Period` | 时间段（dawn/morning/noon/afternoon/evening/night/midnight/day/unknown） |
+| `Beat.BeatType` | 节拍类型（action/dialogue/narration/transition） |
+| `Beat.Emotion` | 情绪（happy/sad/angry/fearful/surprised/disgusted/neutral/sarcastic/loving/guilty/proud/shy） |
+| `Beat.Intensity` | 情绪强度（low/medium/high） |
+| `Relationship.RelationshipType` | 关系类型（family/friend/colleague/lover/enemy/superior/subordinate/acquaintance/stranger） |
+
+## 使用示例
+
+```java
+// ID生成器使用
+IDGenerator generator = new IDGenerator();
+
+String charId = generator.generateCharacterId();  // char_001
+String sceneId = generator.generateSceneId();     // scene_001
+
+// 创建剧本对象
+Script script = new Script();
+script.setSchemaVersion("1.0");
+
+MetaInformation meta = new MetaInformation();
+meta.setTitle("咖啡厅偶遇");
+meta.setAuthor("张作家");
+script.setMeta(meta);
+```
+
+## 测试
+
+```bash
+# 运行所有测试
+mvn test
+
+# 运行特定测试
+mvn test -Dtest=IDGeneratorTest
+```
+
+## 版本历史
+
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| v0.1.0 | 2026-06-05 | Java项目初始化，Schema定义，数据模型 |
+
+## 许可证
+
+MIT License
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request。
