@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -19,6 +20,7 @@ import java.time.LocalDate;
 import java.util.*;
 
 @Component
+@Profile("demo")  // 只在 demo profile 下自动运行
 public class SimpleScriptDemo implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleScriptDemo.class);
