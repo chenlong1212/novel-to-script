@@ -4,6 +4,7 @@ import com.example.novel2script.analyzer.CharacterAnalyzer.CharacterInfo;
 import com.example.novel2script.analyzer.DialogueExtractor.DialogueInfo;
 import com.example.novel2script.analyzer.DialogueExtractor.DialogueStatistics;
 import com.example.novel2script.analyzer.RelationshipAnalyzer.RelationshipInfo;
+import com.example.novel2script.analyzer.SceneSplitter.SceneInfo;
 import com.example.novel2script.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +16,7 @@ import java.util.stream.Collectors;
 
 /**
  * 分析管理器
- * 整合人物分析、对话提取、关系分析
+ * 整合人物分析、对话提取、关系分析、场景分割、情绪标注
  */
 @Component
 public class AnalysisManager {
@@ -30,6 +31,12 @@ public class AnalysisManager {
 
     @Autowired
     private RelationshipAnalyzer relationshipAnalyzer;
+
+    @Autowired
+    private SceneSplitter sceneSplitter;
+
+    @Autowired
+    private EmotionAnnotator emotionAnnotator;
 
     /**
      * 完整分析小说
@@ -48,17 +55,23 @@ public class AnalysisManager {
         result.setCharacterInfos(characterInfos);
         logger.info("识别到 {} 个人物", characterInfos.size());
         
-        // 2. 提取对话
+        // 2. 分割场景
+        logger.info("分割场景...");
+        List<SceneInfo> sceneInfos = sceneSplitter.splitScenes(text);
+        result.setSceneInfos(sceneInfos);
+        logger.info("识别到 {} 个场景", sceneInfos.size());
+        
+        // 3. 提取对话
         logger.info("提取对话...");
         List<DialogueInfo> dialogueInfos = dialogueExtractor.extractDialogues(text);
         result.setDialogueInfos(dialogueInfos);
         logger.info("提取到 {} 条对话", dialogueInfos.size());
         
-        // 3. 统计对话
+        // 4. 统计对话
         DialogueStatistics dialogueStats = dialogueExtractor.calculateStatistics(dialogueInfos);
         result.setDialogueStatistics(dialogueStats);
         
-        // 4. 分析关系
+        // 5. 分析关系
         logger.info("分析关系...");
         List<String> characterNames = characterInfos.stream()
             .map(CharacterInfo::getName)
@@ -67,7 +80,7 @@ public class AnalysisManager {
         result.setRelationshipInfos(relationshipInfos);
         logger.info("识别到 {} 个关系", relationshipInfos.size());
         
-        // 5. 转换为剧本模型
+        // 6. 转换为剧本模型
         logger.info("转换为剧本模型...");
         convertToScriptModel(result);
         
@@ -87,7 +100,7 @@ public class AnalysisManager {
         MetaInformation meta = new MetaInformation();
         meta.setTitle("分析生成的剧本");
         meta.setSource("AI小说分析");
-        meta.setAdapter("AI小说转剧本工具 v0.3");
+        meta.setAdapter("AI小说转剧本工具 v0.4");
         meta.setCreatedAt(java.time.LocalDate.now());
         meta.setUpdatedAt(java.time.LocalDate.now());
         meta.setVersion("1.0");
@@ -106,40 +119,18 @@ public class AnalysisManager {
         }
         script.setCharacters(characters);
         
-        // 转换对话为场景
+        // 转换场景（使用SceneSplitter的结果）
         List<Scene> scenes = new ArrayList<>();
-        Scene currentScene = createDefaultScene(1);
-        List<Beat> beats = new ArrayList<>();
         Map<String, String> nameToId = characterInfosToMap(result.getCharacterInfos());
         
-        for (DialogueInfo dialogue : result.getDialogueInfos()) {
-            Beat beat = new Beat();
-            beat.setType(Beat.BeatType.dialogue);
-            beat.setContent(dialogue.getContent());
-            beat.setEmotion(stringToEmotion(dialogue.getEmotion()));
-            
-            // 查找说话人ID
-            String speakerId = nameToId.get(dialogue.getSpeaker());
-            if (speakerId != null) {
-                beat.setSpeaker(speakerId);
+        if (result.getSceneInfos() != null && !result.getSceneInfos().isEmpty()) {
+            for (SceneInfo sceneInfo : result.getSceneInfos()) {
+                Scene scene = createSceneFromInfo(sceneInfo, nameToId, result.getDialogueInfos());
+                scenes.add(scene);
             }
-            
-            beats.add(beat);
-            
-            // 每20个对话创建一个新场景
-            if (beats.size() >= 20) {
-                currentScene.setBeats(beats);
-                scenes.add(currentScene);
-                
-                currentScene = createDefaultScene(scenes.size() + 1);
-                beats = new ArrayList<>();
-            }
-        }
-        
-        // 添加剩余的对话
-        if (!beats.isEmpty()) {
-            currentScene.setBeats(beats);
-            scenes.add(currentScene);
+        } else {
+            // 如果没有场景信息，使用默认方法
+            scenes = createDefaultScenes(result.getDialogueInfos(), nameToId);
         }
         
         script.setScenes(scenes);
@@ -170,9 +161,142 @@ public class AnalysisManager {
     }
 
     /**
+     * 从SceneInfo创建Scene
+     */
+    private Scene createSceneFromInfo(SceneInfo sceneInfo, 
+                                     Map<String, String> nameToId,
+                                     List<DialogueInfo> allDialogues) {
+        Scene scene = new Scene();
+        scene.setId("scene_" + String.format("%03d", sceneInfo.getNumber()));
+        scene.setNumber(sceneInfo.getNumber());
+        
+        // 地点
+        Location location = new Location();
+        location.setName(sceneInfo.getLocation());
+        location.setType(Location.LocationType.fixed);
+        location.setInterior(isInterior(sceneInfo.getLocation()));
+        location.setDescription(sceneInfo.getDescription());
+        scene.setLocation(location);
+        
+        // 时间
+        TimeSetting time = new TimeSetting();
+        time.setPeriod(parseTimePeriod(sceneInfo.getTime()));
+        time.setSpecific(sceneInfo.getTime());
+        scene.setTime(time);
+        
+        // 描述和氛围
+        scene.setDescription(sceneInfo.getDescription());
+        scene.setAtmosphere(sceneInfo.getAtmosphere());
+        
+        // 转换对话为beats
+        List<Beat> beats = createBeatsForScene(sceneInfo, nameToId, allDialogues);
+        scene.setBeats(beats);
+        
+        return scene;
+    }
+
+    /**
+     * 创建beats
+     */
+    private List<Beat> createBeatsForScene(SceneInfo sceneInfo,
+                                           Map<String, String> nameToId,
+                                           List<DialogueInfo> allDialogues) {
+        List<Beat> beats = new ArrayList<>();
+        
+        // 添加舞台指示
+        if (sceneInfo.getStageDirections() != null) {
+            for (String direction : sceneInfo.getStageDirections()) {
+                Beat beat = new Beat();
+                beat.setType(Beat.BeatType.action);
+                beat.setContent(direction);
+                beats.add(beat);
+            }
+        }
+        
+        // 简单处理：添加这个场景相关的对话
+        // 实际项目中应该更精确地匹配对话到场景
+        int startIndex = (sceneInfo.getNumber() - 1) * 10;
+        int endIndex = Math.min(startIndex + 15, allDialogues.size());
+        
+        for (int i = startIndex; i < endIndex && i < allDialogues.size(); i++) {
+            DialogueInfo dialogue = allDialogues.get(i);
+            
+            Beat beat = new Beat();
+            beat.setType(Beat.BeatType.dialogue);
+            beat.setContent(dialogue.getContent());
+            
+            // 使用EmotionAnnotator分析情绪
+            Beat.Emotion emotion = emotionAnnotator.analyzeEmotion(dialogue.getContent());
+            beat.setEmotion(emotion);
+            beat.setIntensity(emotionAnnotator.analyzeIntensity(dialogue.getContent(), emotion));
+            
+            // 查找说话人ID
+            String speakerId = nameToId.get(dialogue.getSpeaker());
+            if (speakerId != null) {
+                beat.setSpeaker(speakerId);
+            }
+            
+            beats.add(beat);
+        }
+        
+        // 如果没有对话，添加一个叙述
+        if (beats.isEmpty()) {
+            Beat beat = new Beat();
+            beat.setType(Beat.BeatType.narration);
+            beat.setContent(sceneInfo.getDescription().substring(0, Math.min(200, sceneInfo.getDescription().length())));
+            beats.add(beat);
+        }
+        
+        return beats;
+    }
+
+    /**
      * 创建默认场景
      */
-    private Scene createDefaultScene(int number) {
+    private List<Scene> createDefaultScenes(List<DialogueInfo> dialogues, Map<String, String> nameToId) {
+        List<Scene> scenes = new ArrayList<>();
+        int sceneNumber = 1;
+        List<Beat> beats = new ArrayList<>();
+        
+        for (DialogueInfo dialogue : dialogues) {
+            Beat beat = new Beat();
+            beat.setType(Beat.BeatType.dialogue);
+            beat.setContent(dialogue.getContent());
+            
+            // 使用EmotionAnnotator分析情绪
+            Beat.Emotion emotion = emotionAnnotator.analyzeEmotion(dialogue.getContent());
+            beat.setEmotion(emotion);
+            beat.setIntensity(emotionAnnotator.analyzeIntensity(dialogue.getContent(), emotion));
+            
+            // 查找说话人ID
+            String speakerId = nameToId.get(dialogue.getSpeaker());
+            if (speakerId != null) {
+                beat.setSpeaker(speakerId);
+            }
+            
+            beats.add(beat);
+            
+            // 每15个对话创建一个新场景
+            if (beats.size() >= 15) {
+                Scene scene = createBasicScene(sceneNumber++, beats);
+                scenes.add(scene);
+                beats = new ArrayList<>();
+            }
+        }
+        
+        // 添加剩余的对话
+        if (!beats.isEmpty()) {
+            Scene scene = createBasicScene(sceneNumber, beats);
+            scenes.add(scene);
+        }
+        
+        return scenes;
+    }
+
+    /**
+     * 创建基础场景
+     */
+    private Scene createBasicScene(int number, List<Beat> beats) {
         Scene scene = new Scene();
         scene.setId("scene_" + String.format("%03d", number));
         scene.setNumber(number);
@@ -188,8 +312,47 @@ public class AnalysisManager {
         scene.setTime(time);
         
         scene.setDescription("从对话分析生成的场景");
+        scene.setBeats(beats);
         
         return scene;
+    }
+
+    /**
+     * 判断是否是室内场景
+     */
+    private boolean isInterior(String location) {
+        if (location == null) return true;
+        String lower = location.toLowerCase();
+        return lower.contains("房间") || lower.contains("内") || 
+               lower.contains("里") || lower.contains("室") ||
+               !lower.contains("公园") && !lower.contains("路") && 
+               !lower.contains("街") && !lower.contains("外");
+    }
+
+    /**
+     * 解析时间段
+     */
+    private TimeSetting.Period parseTimePeriod(String time) {
+        if (time == null) return TimeSetting.Period.unknown;
+        
+        String lower = time.toLowerCase();
+        if (lower.contains("早上") || lower.contains("早晨") || lower.contains("清晨")) {
+            return TimeSetting.Period.morning;
+        } else if (lower.contains("中午") || lower.contains("正午")) {
+            return TimeSetting.Period.noon;
+        } else if (lower.contains("下午")) {
+            return TimeSetting.Period.afternoon;
+        } else if (lower.contains("傍晚") || lower.contains("黄昏")) {
+            return TimeSetting.Period.evening;
+        } else if (lower.contains("晚上") || lower.contains("夜晚")) {
+            return TimeSetting.Period.night;
+        } else if (lower.contains("深夜") || lower.contains("午夜")) {
+            return TimeSetting.Period.midnight;
+        } else if (lower.contains("黎明")) {
+            return TimeSetting.Period.dawn;
+        } else {
+            return TimeSetting.Period.unknown;
+        }
     }
 
     /**
@@ -201,30 +364,6 @@ public class AnalysisManager {
             map.put(info.getName(), info.getId());
         }
         return map;
-    }
-
-    /**
-     * 字符串转换为情绪枚举
-     */
-    private Beat.Emotion stringToEmotion(String emotion) {
-        if (emotion == null) return Beat.Emotion.neutral;
-        
-        switch (emotion) {
-            case "happy":
-                return Beat.Emotion.happy;
-            case "angry":
-                return Beat.Emotion.angry;
-            case "sad":
-                return Beat.Emotion.sad;
-            case "surprised":
-                return Beat.Emotion.surprised;
-            case "fearful":
-                return Beat.Emotion.fearful;
-            case "loving":
-                return Beat.Emotion.loving;
-            default:
-                return Beat.Emotion.neutral;
-        }
     }
 
     /**
@@ -256,6 +395,7 @@ public class AnalysisManager {
         private List<DialogueInfo> dialogueInfos;
         private DialogueStatistics dialogueStatistics;
         private List<RelationshipInfo> relationshipInfos;
+        private List<SceneInfo> sceneInfos;
         private Script script;
 
         public List<CharacterInfo> getCharacterInfos() {
@@ -288,6 +428,14 @@ public class AnalysisManager {
 
         public void setRelationshipInfos(List<RelationshipInfo> relationshipInfos) {
             this.relationshipInfos = relationshipInfos;
+        }
+
+        public List<SceneInfo> getSceneInfos() {
+            return sceneInfos;
+        }
+
+        public void setSceneInfos(List<SceneInfo> sceneInfos) {
+            this.sceneInfos = sceneInfos;
         }
 
         public Script getScript() {
