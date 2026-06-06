@@ -1,5 +1,6 @@
 package com.example.novel2script.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
 
@@ -8,8 +9,13 @@ public class Character {
     private String name;
     private Role role;
     private String description;
+    
+    @JsonProperty("first_appear")
     private String firstAppear;
+    
+    @JsonProperty("last_appear")
     private String lastAppear;
+    
     private List<String> aliases;
     private Map<String, Object> attributes;
 

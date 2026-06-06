@@ -1,5 +1,6 @@
 package com.example.novel2script.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -8,12 +9,21 @@ public class MetaInformation {
     private String source;
     private String author;
     private String adapter;
+    
+    @JsonProperty("created_at")
     private LocalDate createdAt;
+    
+    @JsonProperty("updated_at")
     private LocalDate updatedAt;
+    
     private String version;
     private List<String> genre;
     private String synopsis;
+    
+    @JsonProperty("total_scenes")
     private Integer totalScenes;
+    
+    @JsonProperty("total_characters")
     private Integer totalCharacters;
 
     public MetaInformation() {

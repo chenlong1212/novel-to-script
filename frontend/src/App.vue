@@ -1,27 +1,29 @@
 <template>
   <div class="app-container">
-    <!-- 顶部标题 -->
+    <!-- 头部 -->
     <header class="app-header">
-      <h1>📖 小说转剧本工具</h1>
-      <span class="version-tag">v1.1</span>
+      <h1>📖 AI小说转剧本工具</h1>
+      <span class="version-tag">v1.2</span>
     </header>
 
-    <!-- 主要内容 -->
+    <!-- 主要内容区 -->
     <main class="main-content">
       <!-- 左侧：上传区 -->
       <div class="upload-section">
         <div class="card">
-          <h2>1. 上传小说</h2>
+          <h2>📄 上传小说</h2>
           
-          <div class="upload-area" 
-               :class="{ 'drag-over': isDragOver }"
-               @dragover.prevent="handleDragOver"
-               @dragleave.prevent="isDragOver = false"
-               @drop.prevent="handleDrop"
-               @click="$refs.fileInput.click"
+          <!-- 拖拽区域 -->
+          <div 
+            class="upload-area" 
+            :class="{ 'drag-over': isDragOver }"
+            @dragover.prevent="handleDragOver"
+            @dragleave.prevent="handleDragLeave"
+            @drop.prevent="handleDrop"
+            @click="triggerFileSelect"
           >
-            <div class="upload-icon">📄</div>
-            <p>拖拽文件到这里或点击上传</p>
+            <div class="upload-icon">📂</div>
+            <p>拖拽文件到这里，或点击选择</p>
             <p class="file-hint">支持 .txt 格式</p>
             <input 
               ref="fileInput"
@@ -41,254 +43,178 @@
             <button class="btn-remove" @click="removeFile">✕</button>
           </div>
 
-          <!-- 小说预览 -->
-          <div v-if="novelContent" class="preview-area">
-            <h3>小说预览</h3>
-            <div class="novel-text">{{ novelContent }}</div>
+          <!-- 操作按钮 -->
+          <div class="action-buttons">
+            <button 
+              class="btn-convert" 
+              :disabled="!selectedFile || isLoading"
+              @click="convertToYaml"
+            >
+              {{ isLoading ? '⏳ 转换中...' : '✨ 转换为剧本' }}
+            </button>
+            <button 
+              class="btn-download"
+              :disabled="!yamlContent"
+              @click="downloadYaml"
+            >
+              📥 下载YAML
+            </button>
           </div>
-
-          <!-- 转换按钮 -->
-          <button 
-            class="btn-convert"
-            :disabled="!selectedFile || isConverting"
-            @click="startConversion"
-          >
-            {{ isConverting ? '🔄 转换中...' : '✨ 开始转换' }}
-          </button>
         </div>
       </div>
 
       <!-- 右侧：结果区 -->
       <div class="result-section">
         <div class="card">
-          <h2>2. 转换结果</h2>
-
-          <!-- 状态提示 -->
-          <div v-if="isConverting" class="status-info converting">
+          <h2>📝 转换结果 (YAML)</h2>
+          
+          <!-- 加载状态 -->
+          <div v-if="isLoading" class="loading-state">
             <div class="spinner"></div>
-            <p>{{ statusMessage }}</p>
+            <p>正在分析小说内容，请稍候...</p>
           </div>
 
-          <div v-else-if="hasError" class="status-info error">
+          <!-- 错误状态 -->
+          <div v-else-if="hasError" class="error-state">
             <p>❌ 转换失败：{{ errorMessage }}</p>
             <button class="btn-retry" @click="reset">重试</button>
           </div>
 
-          <!-- 转换成功结果 -->
-          <div v-else-if="script" class="script-output">
-            <!-- 剧本信息 -->
-            <div class="script-info">
-              <div class="info-item">
-                <span class="label">标题</span>
-                <span class="value">{{ script.meta?.title || '未命名' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">人物</span>
-                <span class="value">{{ script.characters?.length || 0 }} 个</span>
-              </div>
-              <div class="info-item">
-                <span class="label">场景</span>
-                <span class="value">{{ script.scenes?.length || 0 }} 个</span>
-              </div>
-            </div>
-
-            <!-- 人物列表 -->
-            <div v-if="script.characters && script.characters.length > 0" class="section">
-              <h3>👥 人物列表</h3>
-              <div class="character-list">
-                <span 
-                  v-for="char in script.characters" 
-                  :key="char.id"
-                  class="character-badge"
-                >
-                  {{ char.name }}
-                </span>
-              </div>
-            </div>
-
-            <!-- 剧本内容 -->
-            <div v-if="script.scenes && script.scenes.length > 0" class="section">
-              <h3>🎬 剧本内容</h3>
-              <div 
-                v-for="scene in script.scenes" 
-                :key="scene.id"
-                class="scene-block"
-              >
-                <div class="scene-header">
-                  场景 {{ scene.number }} - {{ scene.location?.name || '未知地点' }}
-                </div>
-                <div class="scene-content">
-                  <div 
-                    v-for="beat in scene.beats" 
-                    :key="beat.id"
-                    class="beat-line"
-                    :class="beat.type"
-                  >
-                    <span class="beat-tag">[{{ getBeatTypeName(beat.type) }}]</span>
-                    <span v-if="beat.speaker" class="speaker">{{ beat.speaker }}：</span>
-                    <span class="content">{{ beat.content }}</span>
-                    <span v-if="beat.emotion" class="emotion">({{ beat.emotion }})</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 操作按钮 -->
-            <div class="actions">
-              <button class="btn-copy" @click="copyScript">📋 复制剧本</button>
-              <button class="btn-reset" @click="reset">🔄 重新转换</button>
-            </div>
+          <!-- YAML内容展示 -->
+          <div v-else-if="yamlContent" class="yaml-display">
+            <textarea 
+              v-model="yamlContent" 
+              readonly
+              class="yaml-textarea"
+              spellcheck="false"
+            ></textarea>
           </div>
 
           <!-- 空状态 -->
           <div v-else class="empty-state">
             <div class="empty-icon">📝</div>
-            <p>请上传小说开始转换</p>
+            <p>上传小说后点击转换，结果将在这里显示</p>
           </div>
         </div>
       </div>
     </main>
+
+    <!-- 页脚 -->
+    <footer class="app-footer">
+      <p>使用符合规范的 YAML Schema 格式输出</p>
+    </footer>
   </div>
 </template>
 
 <script>
-import { api } from './services/api';
-
 export default {
   name: 'App',
   data() {
     return {
       selectedFile: null,
-      novelContent: '',
-      script: null,
-      isConverting: false,
+      yamlContent: '',
+      isLoading: false,
       isDragOver: false,
       hasError: false,
       errorMessage: '',
-      statusMessage: ''
+      originalFileName: ''
     };
   },
   methods: {
+    triggerFileSelect() {
+      this.$refs.fileInput.click();
+    },
     handleDragOver() {
       this.isDragOver = true;
     },
-    handleDrop(e) {
+    handleDragLeave() {
       this.isDragOver = false;
-      const file = e.dataTransfer.files[0];
-      if (file && file.name.endsWith('.txt')) {
-        this.loadFile(file);
+    },
+    handleDrop(event) {
+      this.isDragOver = false;
+      const files = event.dataTransfer.files;
+      if (files.length > 0 && files[0].name.endsWith('.txt')) {
+        this.selectedFile = files[0];
       }
     },
-    handleFileSelect(e) {
-      const file = e.target.files[0];
+    handleFileSelect(event) {
+      const file = event.target.files[0];
       if (file) {
-        this.loadFile(file);
+        this.selectedFile = file;
       }
-    },
-    loadFile(file) {
-      this.selectedFile = file;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        this.novelContent = e.target.result;
-      };
-      reader.readAsText(file, 'UTF-8');
     },
     removeFile() {
       this.selectedFile = null;
-      this.novelContent = '';
-      this.$refs.fileInput.value = '';
-    },
-    async startConversion() {
-      if (!this.novelContent) return;
-
-      this.isConverting = true;
+      this.yamlContent = '';
       this.hasError = false;
       this.errorMessage = '';
-      this.script = null;
-      this.statusMessage = '正在分析小说...';
-
+      if (this.$refs.fileInput) {
+        this.$refs.fileInput.value = '';
+      }
+    },
+    async convertToYaml() {
+      if (!this.selectedFile) {
+        return;
+      }
+      
+      this.isLoading = true;
+      this.hasError = false;
+      this.errorMessage = '';
+      this.yamlContent = '';
+      this.originalFileName = this.selectedFile.name;
+      
+      const formData = new FormData();
+      formData.append('file', this.selectedFile);
+      
       try {
-        // 直接调用后端转换
-        const result = await api.convertNovel(this.novelContent);
+        const response = await fetch('http://localhost:8080/api/v1/convert/yaml', {
+          method: 'POST',
+          body: formData
+        });
         
-        if (result.success) {
-          this.script = result.script;
-          this.statusMessage = '转换完成！';
-        } else {
-          throw new Error(result.message || '转换失败');
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || '转换失败');
         }
+        
+        const yaml = await response.text();
+        this.yamlContent = yaml;
+        
+        console.log('转换成功');
+        
       } catch (error) {
+        console.error('转换失败:', error);
         this.hasError = true;
         this.errorMessage = error.message || '网络错误';
-        console.error('转换失败:', error);
       } finally {
-        this.isConverting = false;
+        this.isLoading = false;
       }
     },
-    getBeatTypeName(type) {
-      const names = {
-        'dialogue': '对话',
-        'action': '动作',
-        'narration': '旁白',
-        'transition': '转场'
-      };
-      return names[type] || type;
-    },
-    copyScript() {
-      let text = this.formatScriptAsText(this.script);
-      navigator.clipboard.writeText(text).then(() => {
-        alert('已复制到剪贴板！');
-      }).catch(() => {
-        alert('复制失败，请手动复制');
-      });
-    },
-    formatScriptAsText(script) {
-      let output = '';
+    downloadYaml() {
+      if (!this.yamlContent) {
+        return;
+      }
       
-      // 标题
-      output += `剧本标题：${script.meta?.title || '未命名'}\n`;
-      output += '='.repeat(50) + '\n\n';
-
-      // 人物
-      if (script.characters && script.characters.length > 0) {
-        output += '人物表：\n';
-        script.characters.forEach(char => {
-          output += `  - ${char.name}`;
-          if (char.role) output += ` (${char.role})`;
-          output += '\n';
-        });
-        output += '\n';
+      // 生成文件名
+      let fileName = 'script_converted.yaml';
+      if (this.originalFileName) {
+        const baseName = this.originalFileName.replace('.txt', '');
+        fileName = baseName + '_converted.yaml';
       }
-
-      // 场景
-      if (script.scenes && script.scenes.length > 0) {
-        script.scenes.forEach(scene => {
-          output += `【场景 ${scene.number}】 ${scene.location?.name || '未知地点'}\n`;
-          output += '-'.repeat(50) + '\n';
-          
-          if (scene.beats && scene.beats.length > 0) {
-            scene.beats.forEach(beat => {
-              output += `[${this.getBeatTypeName(beat.type)}] `;
-              if (beat.speaker) {
-                output += `${beat.speaker}：`;
-              }
-              output += beat.content;
-              if (beat.emotion) {
-                output += ` (${beat.emotion})`;
-              }
-              output += '\n';
-            });
-          }
-          output += '\n';
-        });
-      }
-
-      return output;
+      
+      // 创建下载
+      const blob = new Blob([this.yamlContent], { type: 'application/x-yaml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     },
     reset() {
-      this.script = null;
-      this.hasError = false;
-      this.errorMessage = '';
+      this.removeFile();
     },
     formatFileSize(bytes) {
       if (bytes < 1024) return bytes + ' B';
@@ -307,7 +233,7 @@ export default {
 }
 
 body {
-  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
   padding: 20px;
@@ -327,7 +253,7 @@ body {
 .app-header h1 {
   font-size: 2.5rem;
   margin-bottom: 10px;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
 }
 
 .version-tag {
@@ -360,7 +286,6 @@ body {
   display: inline-block;
 }
 
-/* 上传区 */
 .upload-area {
   border: 3px dashed #ddd;
   border-radius: 12px;
@@ -371,14 +296,13 @@ body {
   background: #f9f9f9;
 }
 
-.upload-area:hover {
+.upload-area:hover,
+.upload-area.drag-over {
   border-color: #667eea;
   background: #f0f4ff;
 }
 
 .upload-area.drag-over {
-  border-color: #667eea;
-  background: #e8eeff;
   transform: scale(1.02);
 }
 
@@ -437,41 +361,27 @@ body {
   transform: scale(1.2);
 }
 
-.preview-area {
-  margin-top: 20px;
+.action-buttons {
+  display: flex;
+  gap: 15px;
+  margin-top: 25px;
 }
 
-.preview-area h3 {
+.btn-convert,
+.btn-download {
+  flex: 1;
+  padding: 14px;
   font-size: 1rem;
-  color: #333;
-  margin-bottom: 10px;
-}
-
-.novel-text {
-  max-height: 300px;
-  overflow-y: auto;
-  padding: 15px;
-  background: #f8f9fa;
+  font-weight: bold;
+  border: none;
   border-radius: 8px;
-  font-family: 'Courier New', monospace;
-  font-size: 0.9rem;
-  line-height: 1.8;
-  white-space: pre-wrap;
-  color: #333;
+  cursor: pointer;
+  transition: all 0.3s;
 }
 
 .btn-convert {
-  width: 100%;
-  margin-top: 25px;
-  padding: 18px;
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: white;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s;
+  color: white;
 }
 
 .btn-convert:hover:not(:disabled) {
@@ -484,18 +394,44 @@ body {
   cursor: not-allowed;
 }
 
-/* 结果区 */
-.status-info {
+.btn-download {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white;
+}
+
+.btn-download:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 20px rgba(17, 153, 142, 0.4);
+}
+
+.btn-download:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.yaml-display {
+  margin-top: 10px;
+}
+
+.yaml-textarea {
+  width: 100%;
+  min-height: 500px;
+  padding: 15px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  resize: vertical;
+  background: #fafafa;
+  color: #333;
+}
+
+.loading-state,
+.error-state,
+.empty-state {
   text-align: center;
-  padding: 40px;
-}
-
-.status-info.converting {
-  color: #667eea;
-}
-
-.status-info.error {
-  color: #ff6b6b;
+  padding: 60px 20px;
 }
 
 .spinner {
@@ -513,183 +449,35 @@ body {
   100% { transform: rotate(360deg); }
 }
 
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.error-state p {
+  color: #ff6b6b;
+  font-size: 1.1rem;
+  margin-bottom: 20px;
+}
+
 .btn-retry {
-  margin-top: 20px;
   padding: 10px 30px;
   background: #667eea;
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 80px 20px;
-  color: #999;
-}
-
-.empty-icon {
-  font-size: 5rem;
-  margin-bottom: 20px;
-}
-
-.script-info {
-  display: flex;
-  gap: 30px;
-  margin-bottom: 25px;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 10px;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.info-item .label {
-  font-size: 0.85rem;
-  color: #666;
-}
-
-.info-item .value {
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: #333;
-}
-
-.section {
-  margin-bottom: 25px;
-}
-
-.section h3 {
-  font-size: 1.1rem;
-  color: #333;
-  margin-bottom: 15px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.character-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.character-badge {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 20px;
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.scene-block {
-  border: 2px solid #e0e0e0;
-  border-radius: 10px;
-  margin-bottom: 15px;
-  overflow: hidden;
-}
-
-.scene-header {
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-weight: bold;
-  font-size: 1.05rem;
-}
-
-.scene-content {
-  padding: 15px 20px;
-}
-
-.beat-line {
-  padding: 10px 0;
-  line-height: 1.6;
-  border-bottom: 1px dashed #eee;
-}
-
-.beat-line:last-child {
-  border-bottom: none;
-}
-
-.beat-tag {
-  font-weight: bold;
-  color: #667eea;
-  margin-right: 8px;
-  font-size: 0.85rem;
-}
-
-.speaker {
-  font-weight: bold;
-  color: #333;
-}
-
-.beat-line.dialogue {
-  background: #f0f4ff;
-  margin: 0 -20px;
-  padding: 10px 20px;
-}
-
-.beat-line.action {
-  background: #f0fff4;
-  margin: 0 -20px;
-  padding: 10px 20px;
-}
-
-.beat-line.narration {
-  background: #fff8e6;
-  margin: 0 -20px;
-  padding: 10px 20px;
-}
-
-.emotion {
-  color: #999;
-  font-size: 0.85rem;
-  margin-left: 8px;
-}
-
-.actions {
-  display: flex;
-  gap: 15px;
-  margin-top: 30px;
-}
-
-.btn-copy, .btn-reset {
-  flex: 1;
-  padding: 14px;
   font-size: 1rem;
-  font-weight: bold;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: 0.3s;
 }
 
-.btn-copy {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  color: white;
+.app-footer {
+  text-align: center;
+  margin-top: 30px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
 }
 
-.btn-copy:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
-}
-
-.btn-reset {
-  background: #f0f0f0;
-  color: #333;
-}
-
-.btn-reset:hover {
-  background: #e0e0e0;
-}
-
-/* 响应式 */
 @media (max-width: 968px) {
   .main-content {
     grid-template-columns: 1fr;

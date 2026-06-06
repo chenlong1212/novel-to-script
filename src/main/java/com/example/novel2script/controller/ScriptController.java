@@ -1,29 +1,31 @@
 package com.example.novel2script.controller;
 
 import com.example.novel2script.analyzer.AnalysisManager;
-import com.example.novel2script.analyzer.Proofreader;
-import com.example.novel2script.analyzer.QualityEvaluator;
-import com.example.novel2script.model.*;
+import com.example.novel2script.model.Script;
 import com.example.novel2script.reader.NovelReader;
+import com.example.novel2script.util.YamlSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * REST API 控制器
+ * REST API 控制器 - v1.2 版本
+ * 返回符合YAML Schema规范的结果
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -33,7 +35,6 @@ public class ScriptController {
     private static final Logger logger = LoggerFactory.getLogger(ScriptController.class);
     
     private static final String UPLOAD_DIR = "uploads/";
-    private static final String OUTPUT_DIR = "output/";
 
     @Autowired
     private NovelReader novelReader;
@@ -42,26 +43,158 @@ public class ScriptController {
     private AnalysisManager analysisManager;
     
     @Autowired
-    private QualityEvaluator qualityEvaluator;
-    
-    @Autowired
-    private Proofreader proofreader;
+    private YamlSerializer yamlSerializer;
 
     /**
-     * 上传小说文件
+     * 健康检查
+     */
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> healthCheck() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "ok");
+        response.put("version", "1.2.0");
+        response.put("timestamp", System.currentTimeMillis());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 上传小说并转换为剧本，直接返回YAML
+     */
+    @PostMapping(value = "/convert/yaml", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<String> convertToYaml(@RequestParam("file") MultipartFile file) {
+        try {
+            logger.info("收到转换请求: {}", file.getOriginalFilename());
+            
+            // 读取文件内容
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            
+            // 执行完整分析
+            AnalysisManager.AnalysisResult result = analysisManager.analyze(content);
+            Script script = result.getScript();
+            
+            // 设置一些默认信息
+            if (script.getMeta() != null) {
+                script.getMeta().setSource(file.getOriginalFilename());
+                script.getMeta().setAuthor("未知");
+                script.getMeta().setAdapter("AI小说转剧本工具 v1.2");
+            }
+            
+            // 序列化为YAML
+            String yamlContent = yamlSerializer.serialize(script);
+            
+            logger.info("YAML转换成功，长度: {} 字符", yamlContent.length());
+            
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("application/x-yaml; charset=UTF-8"))
+                    .body(yamlContent);
+            
+        } catch (Exception e) {
+            logger.error("转换失败", e);
+            return ResponseEntity.status(500)
+                    .body("转换失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 上传小说并转换为剧本，提供YAML下载
+     */
+    @PostMapping(value = "/convert/yaml/download", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<byte[]> downloadYaml(@RequestParam("file") MultipartFile file) {
+        try {
+            logger.info("收到下载请求: {}", file.getOriginalFilename());
+            
+            // 读取文件内容
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            
+            // 执行完整分析
+            AnalysisManager.AnalysisResult result = analysisManager.analyze(content);
+            Script script = result.getScript();
+            
+            // 设置一些默认信息
+            if (script.getMeta() != null) {
+                script.getMeta().setSource(file.getOriginalFilename());
+                script.getMeta().setAuthor("未知");
+                script.getMeta().setAdapter("AI小说转剧本工具 v1.2");
+            }
+            
+            // 序列化为YAML
+            String yamlContent = yamlSerializer.serialize(script);
+            
+            // 生成文件名
+            String originalFilename = file.getOriginalFilename();
+            String baseName = originalFilename != null 
+                ? originalFilename.replace(".txt", "") 
+                : "script";
+            String outputFileName = baseName + "_converted.yaml";
+            
+            logger.info("YAML下载准备完成: {}", outputFileName);
+            
+            // 返回可下载的响应
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, 
+                            "attachment; filename=\"" + outputFileName + "\"")
+                    .contentType(MediaType.parseMediaType("application/x-yaml; charset=UTF-8"))
+                    .body(yamlContent.getBytes(StandardCharsets.UTF_8));
+            
+        } catch (Exception e) {
+            logger.error("下载失败", e);
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
+     * 使用文本内容转换为YAML（不是文件上传）
+     */
+    @PostMapping(value = "/convert/yaml/text", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> convertTextToYaml(@RequestBody Map<String, String> request) {
+        try {
+            String content = request.get("content");
+            if (content == null || content.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("小说内容不能为空");
+            }
+            
+            logger.info("收到文本转换请求，内容长度: {}", content.length());
+            
+            // 执行完整分析
+            AnalysisManager.AnalysisResult result = analysisManager.analyze(content);
+            Script script = result.getScript();
+            
+            // 设置一些默认信息
+            if (script.getMeta() != null) {
+                script.getMeta().setSource("直接输入");
+                script.getMeta().setAuthor("未知");
+                script.getMeta().setAdapter("AI小说转剧本工具 v1.2");
+            }
+            
+            // 序列化为YAML
+            String yamlContent = yamlSerializer.serialize(script);
+            
+            logger.info("YAML转换成功，长度: {} 字符", yamlContent.length());
+            
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("application/x-yaml; charset=UTF-8"))
+                    .body(yamlContent);
+            
+        } catch (Exception e) {
+            logger.error("转换失败", e);
+            return ResponseEntity.status(500)
+                    .body("转换失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 上传小说文件 - 保持兼容
      */
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadNovel(@RequestParam("file") MultipartFile file) {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            // 创建上传目录
             File uploadDir = new File(UPLOAD_DIR);
             if (!uploadDir.exists()) {
                 uploadDir.mkdirs();
             }
             
-            // 保存文件
             String originalFilename = file.getOriginalFilename();
             String fileId = UUID.randomUUID().toString();
             String fileName = fileId + "_" + originalFilename;
@@ -83,269 +216,5 @@ public class ScriptController {
             response.put("message", "文件上传失败: " + e.getMessage());
             return ResponseEntity.status(500).body(response);
         }
-    }
-
-    /**
-     * 读取小说内容
-     */
-    @GetMapping("/novel/{fileId}")
-    public ResponseEntity<Map<String, Object>> getNovelContent(@PathVariable String fileId) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            // 查找对应的文件
-            File uploadDir = new File(UPLOAD_DIR);
-            File[] files = uploadDir.listFiles((dir, name) -> name.startsWith(fileId));
-            
-            if (files == null || files.length == 0) {
-                response.put("success", false);
-                response.put("message", "文件不存在");
-                return ResponseEntity.status(404).body(response);
-            }
-            
-            String content = novelReader.readNovel(files[0].getAbsolutePath());
-            
-            response.put("success", true);
-            response.put("content", content);
-            response.put("fileName", files[0].getName());
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("读取小说内容失败", e);
-            response.put("success", false);
-            response.put("message", "读取失败: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
-     * 执行转换
-     */
-    @PostMapping("/convert")
-    public ResponseEntity<Map<String, Object>> convertNovel(@RequestBody Map<String, String> request) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            String content = request.get("content");
-            if (content == null || content.isEmpty()) {
-                response.put("success", false);
-                response.put("message", "小说内容不能为空");
-                return ResponseEntity.badRequest().body(response);
-            }
-            
-            logger.info("开始转换小说...");
-            
-            // 执行分析
-            AnalysisManager.AnalysisResult result = analysisManager.analyze(content);
-            Script script = result.getScript();
-            
-            // 执行质量评估
-            QualityReport qualityReport = qualityEvaluator.evaluate(script, content);
-            
-            logger.info("转换完成，评分: {}", qualityReport.getOverallScore());
-            
-            response.put("success", true);
-            response.put("script", script);
-            response.put("qualityReport", qualityReport);
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("转换失败", e);
-            response.put("success", false);
-            response.put("message", "转换失败: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
-     * 获取质量报告
-     */
-    @PostMapping("/quality")
-    public ResponseEntity<Map<String, Object>> evaluateQuality(@RequestBody Map<String, String> request) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            String content = request.get("content");
-            String scriptJson = request.get("script");
-            
-            if (content == null || content.isEmpty()) {
-                response.put("success", false);
-                response.put("message", "小说内容不能为空");
-                return ResponseEntity.badRequest().body(response);
-            }
-            
-            // 这里应该从scriptJson反序列化Script对象
-            // 简化处理，假设script已经在request中
-            response.put("success", true);
-            response.put("message", "质量评估需要完整的Script对象");
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("质量评估失败", e);
-            response.put("success", false);
-            response.put("message", "评估失败: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
-     * 创建修正
-     */
-    @PostMapping("/corrections")
-    public ResponseEntity<Map<String, Object>> createCorrection(@RequestBody Map<String, String> request) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            String scriptId = request.get("scriptId");
-            String type = request.get("type");
-            String targetId = request.get("targetId");
-            String field = request.get("field");
-            String originalValue = request.get("originalValue");
-            String correctedValue = request.get("correctedValue");
-            String reason = request.get("reason");
-            
-            if (scriptId == null || type == null || targetId == null) {
-                response.put("success", false);
-                response.put("message", "缺少必要参数");
-                return ResponseEntity.badRequest().body(response);
-            }
-            
-            Correction.CorrectionType correctionType = Correction.CorrectionType.valueOf(type.toUpperCase());
-            
-            Correction correction = proofreader.createCorrection(
-                scriptId, correctionType, targetId, field,
-                originalValue, correctedValue, reason
-            );
-            
-            response.put("success", true);
-            response.put("correction", correction);
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("创建修正失败", e);
-            response.put("success", false);
-            response.put("message", "创建失败: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
-     * 获取修正列表
-     */
-    @GetMapping("/corrections/{scriptId}")
-    public ResponseEntity<Map<String, Object>> getCorrections(@PathVariable String scriptId) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            List<Correction> corrections = proofreader.getCorrections(scriptId);
-            List<Correction> pendingCorrections = proofreader.getPendingCorrections(scriptId);
-            
-            response.put("success", true);
-            response.put("corrections", corrections);
-            response.put("pendingCount", pendingCorrections.size());
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("获取修正列表失败", e);
-            response.put("success", false);
-            response.put("message", "获取失败: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
-     * 应用修正
-     */
-    @PostMapping("/corrections/{correctionId}/apply")
-    public ResponseEntity<Map<String, Object>> applyCorrection(
-            @PathVariable String correctionId,
-            @RequestBody Map<String, Object> request) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            Script script = (Script) request.get("script");
-            if (script == null) {
-                response.put("success", false);
-                response.put("message", "剧本对象不能为空");
-                return ResponseEntity.badRequest().body(response);
-            }
-            
-            // 查找并应用修正
-            List<Correction> corrections = proofreader.getCorrections(
-                script.getMeta() != null ? script.getMeta().getTitle() : "unknown"
-            );
-            
-            Correction targetCorrection = null;
-            for (Correction c : corrections) {
-                if (c.getCorrectionId().equals(correctionId)) {
-                    targetCorrection = c;
-                    break;
-                }
-            }
-            
-            if (targetCorrection == null) {
-                response.put("success", false);
-                response.put("message", "修正记录不存在");
-                return ResponseEntity.status(404).body(response);
-            }
-            
-            proofreader.applyCorrection(targetCorrection, script);
-            
-            response.put("success", true);
-            response.put("script", script);
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("应用修正失败", e);
-            response.put("success", false);
-            response.put("message", "应用失败: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
-     * 导出剧本
-     */
-    @GetMapping("/export/{scriptId}")
-    public ResponseEntity<Map<String, Object>> exportScript(@PathVariable String scriptId) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            // 创建输出目录
-            File outputDir = new File(OUTPUT_DIR);
-            if (!outputDir.exists()) {
-                outputDir.mkdirs();
-            }
-            
-            response.put("success", true);
-            response.put("message", "导出功能需要完整的剧本对象");
-            response.put("outputPath", OUTPUT_DIR + scriptId + ".yaml");
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("导出失败", e);
-            response.put("success", false);
-            response.put("message", "导出失败: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
-     * 健康检查
-     */
-    @GetMapping("/health")
-    public ResponseEntity<Map<String, Object>> healthCheck() {
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", "ok");
-        response.put("version", "1.0.0");
-        response.put("timestamp", System.currentTimeMillis());
-        return ResponseEntity.ok(response);
     }
 }
