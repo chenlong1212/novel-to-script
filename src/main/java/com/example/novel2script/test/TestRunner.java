@@ -18,7 +18,7 @@ import java.util.List;
  * 测试运行器
  * 用于测试各个组件功能
  */
-@Component
+// @Component  // 注释掉，防止启动时自动运行示例
 public class TestRunner implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(TestRunner.class);

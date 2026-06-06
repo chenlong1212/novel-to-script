@@ -82,7 +82,7 @@ public class AnalysisManager {
         
         // 6. 转换为剧本模型
         logger.info("转换为剧本模型...");
-        convertToScriptModel(result);
+        convertToScriptModel(result, text);
         
         logger.info("小说分析完成");
         
@@ -92,15 +92,18 @@ public class AnalysisManager {
     /**
      * 转换为剧本模型
      */
-    private void convertToScriptModel(AnalysisResult result) {
+    private void convertToScriptModel(AnalysisResult result, String originalText) {
         Script script = new Script();
         script.setSchemaVersion("1.0");
         
+        // 尝试从文本提取标题
+        String title = extractTitle(originalText);
+        
         // 设置元信息
         MetaInformation meta = new MetaInformation();
-        meta.setTitle("分析生成的剧本");
+        meta.setTitle(title);
         meta.setSource("AI小说分析");
-        meta.setAdapter("AI小说转剧本工具 v0.4");
+        meta.setAdapter("AI小说转剧本工具 v1.1");
         meta.setCreatedAt(java.time.LocalDate.now());
         meta.setUpdatedAt(java.time.LocalDate.now());
         meta.setVersion("1.0");
@@ -364,6 +367,41 @@ public class AnalysisManager {
             map.put(info.getName(), info.getId());
         }
         return map;
+    }
+
+    /**
+     * 从文本提取标题
+     */
+    private String extractTitle(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return "小说剧本";
+        }
+        
+        String[] lines = text.split("\n");
+        
+        for (String line : lines) {
+            line = line.trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+            
+            // 尝试找标题
+            if (line.startsWith("#") || line.startsWith("《") || line.startsWith("[")) {
+                line = line.replaceAll("^[#\\[《]+", "").replaceAll("[#\\]》]+$", "").trim();
+                if (!line.isEmpty()) {
+                    return line;
+                }
+            }
+            
+            // 第一章之类的
+            if (line.length() <= 30 && !line.contains("。") && !line.contains("，") && !line.contains("：")) {
+                return line;
+            }
+            
+            break;
+        }
+        
+        return "小说剧本";
     }
 
     /**
