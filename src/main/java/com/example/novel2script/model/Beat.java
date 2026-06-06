@@ -1,6 +1,8 @@
 package com.example.novel2script.model;
 
 public class Beat {
+    
+    private String id;
     private BeatType type;
     private String content;
     
@@ -15,6 +17,15 @@ public class Beat {
     private String to;
 
     public Beat() {
+        this.id = "beat_" + System.currentTimeMillis() + "_" + (int)(Math.random() * 1000);
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
     }
 
     public BeatType getType() {
