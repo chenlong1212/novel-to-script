@@ -14,7 +14,7 @@
 
 ## 项目状态
 
-**当前版本：v0.5.0**
+**当前版本：v1.0.0**
 
 已完成：
 - ✅ YAML Schema 定义文档
@@ -34,6 +34,9 @@
 - ✅ 情绪标注增强（v0.4新增）
 - ✅ 质量评估（v0.5新增）
 - ✅ 人工校对和修正功能（v0.5新增）
+- ✅ **可视化Web界面（v1.0新增）**
+- ✅ **REST API后端接口（v1.0新增）**
+- ✅ **全局异常处理（v1.0新增）**
 
 后续版本计划：
 - v1.0: 完整功能 + 生产就绪
@@ -42,24 +45,29 @@
 
 ```
 novel-to-script/
-├── src/
+├── src/                           # 后端源代码
 │   ├── main/
 │   │   ├── java/com/example/novel2script/
-│   │   │   ├── config/              # 配置类
+│   │   │   ├── config/            # 配置类
 │   │   │   │   └── ApplicationConfig.java
-│   │   │   ├── model/               # 数据模型
+│   │   │   ├── model/             # 数据模型
 │   │   │   │   ├── Script.java
 │   │   │   │   ├── Character.java
 │   │   │   │   ├── Scene.java
 │   │   │   │   ├── Beat.java
 │   │   │   │   └── ...
-│   │   │   ├── analyzer/            # 分析器
+│   │   │   ├── analyzer/          # 分析器
 │   │   │   │   ├── CharacterAnalyzer.java  # 人物识别
 │   │   │   │   ├── DialogueExtractor.java  # 对话提取
 │   │   │   │   ├── RelationshipAnalyzer.java # 关系分析
 │   │   │   │   ├── SceneSplitter.java      # 场景分割
 │   │   │   │   ├── EmotionAnnotator.java   # 情绪标注
+│   │   │   │   ├── QualityEvaluator.java   # 质量评估
+│   │   │   │   ├── Proofreader.java        # 人工校对
 │   │   │   │   └── AnalysisManager.java    # 分析管理
+│   │   │   ├── controller/         # REST API控制器
+│   │   │   │   ├── ScriptController.java
+│   │   │   │   └── GlobalExceptionHandler.java
 │   │   │   ├── client/              # API 客户端
 │   │   │   │   └── DeepSeekClient.java
 │   │   │   ├── converter/           # 转换器
@@ -72,14 +80,32 @@ novel-to-script/
 │   │   │   │   └── IDGenerator.java
 │   │   │   └── Novel2ScriptApplication.java
 │   │   └── resources/
-│   │       └── application.yml       # 应用配置
+│   │       └── application.yml      # 应用配置
 │   └── test/                        # 单元测试
+├── frontend/                        # 前端源代码 (Vue.js)
+│   ├── src/
+│   │   ├── components/              # Vue组件
+│   │   ├── views/                   # 页面视图
+│   │   │   ├── UploadView.vue       # 上传视图
+│   │   │   ├── ConvertView.vue      # 转换视图
+│   │   │   ├── QualityView.vue     # 质量评估视图
+│   │   │   └── ProofreadView.vue   # 校对视图
+│   │   ├── services/                # API服务
+│   │   │   └── api.js
+│   │   ├── App.vue                  # 根组件
+│   │   └── main.js                  # 入口文件
+│   ├── public/                      # 静态资源
+│   ├── package.json
+│   └── vite.config.js
 ├── docs/
 │   └── yaml-schema.md               # Schema定义文档
 ├── examples/
 │   ├── input/                       # 示例小说
 │   └── output/                      # 示例输出
 ├── pom.xml                          # Maven配置
+├── package.json                     # 前端依赖
+├── start.sh                         # Linux/Mac启动脚本
+├── start.ps1                        # Windows启动脚本
 └── README.md                        # 项目文档
 ```
 
@@ -319,6 +345,7 @@ mvn test -Dtest=IDGeneratorTest
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v1.0.0 | 2026-06-06 | 可视化Web界面 + REST API |
 | v0.5.0 | 2026-06-05 | 质量评估 + 人工校对修正 |
 | v0.4.0 | 2026-06-05 | 场景分割 + 情绪标注 |
 | v0.3.0 | 2026-06-05 | 人物识别 + 对话提取 + 关系分析 |

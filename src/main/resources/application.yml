@@ -1,5 +1,5 @@
 # AI 小说转剧本工具配置文件
-# 版本: v0.1.0
+# 版本: v1.0.0
 
 server:
   port: 8080
@@ -7,6 +7,11 @@ server:
 spring:
   application:
     name: novel-to-script
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
 
 # 项目配置
 novel2script:

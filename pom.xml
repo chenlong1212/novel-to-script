@@ -14,9 +14,9 @@
     
     <groupId>com.example</groupId>
     <artifactId>novel-to-script</artifactId>
-    <version>0.1.0</version>
+    <version>1.0.0</version>
     <name>novel-to-script</name>
-    <description>AI辅助小说转剧本工具</description>
+    <description>AI辅助小说转剧本工具 - 可视化Web界面版本</description>
     
     <properties>
         <java.version>17</java.version>
@@ -30,6 +30,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        
+        <!-- Spring Boot Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
         
         <!-- YAML Processing -->
