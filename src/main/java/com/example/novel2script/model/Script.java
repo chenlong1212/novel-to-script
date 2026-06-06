@@ -1,9 +1,12 @@
 package com.example.novel2script.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 public class Script {
+    @JsonProperty("schema_version")
     private String schemaVersion;
+    
     private MetaInformation meta;
     private List<Character> characters;
     private List<Scene> scenes;
