@@ -14,7 +14,7 @@
 
 ## 项目状态
 
-**当前版本：v0.4.0**
+**当前版本：v0.5.0**
 
 已完成：
 - ✅ YAML Schema 定义文档
@@ -32,9 +32,10 @@
 - ✅ 分析管理器
 - ✅ 场景分割（v0.4新增）
 - ✅ 情绪标注增强（v0.4新增）
+- ✅ 质量评估（v0.5新增）
+- ✅ 人工校对和修正功能（v0.5新增）
 
 后续版本计划：
-- v0.5: 批量处理 + 质量优化
 - v1.0: 完整功能 + 生产就绪
 
 ## 项目结构
@@ -254,7 +255,30 @@ String description = annotator.getEmotionDescription(emotion);
 String emoji = annotator.getEmotionEmoji(emotion);
 ```
 
-### 8. 完整分析（v0.3+）
+### 8. 质量评估（v0.5新增）
+
+```java
+QualityEvaluator evaluator = new QualityEvaluator();
+QualityReport report = evaluator.evaluate(script, originalText);
+double overallScore = report.getOverallScore();
+String grade = report.getGrade();
+List<QualityReport.QualityIssue> issues = report.getIssues();
+List<String> suggestions = report.getSuggestions();
+```
+
+### 9. 人工校对（v0.5新增）
+
+```java
+Proofreader proofreader = new Proofreader();
+Correction correction = proofreader.createCorrection(
+    scriptId, Correction.CorrectionType.CHARACTER,
+    characterId, "name", "旧名称", "新名称", "修正人物名称"
+);
+proofreader.applyCorrection(correction, script);
+List<Correction> pending = proofreader.getPendingCorrections(scriptId);
+```
+
+### 10. 完整分析（v0.3+）
 
 ```java
 AnalysisManager manager = new AnalysisManager();
@@ -295,6 +319,7 @@ mvn test -Dtest=IDGeneratorTest
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v0.5.0 | 2026-06-05 | 质量评估 + 人工校对修正 |
 | v0.4.0 | 2026-06-05 | 场景分割 + 情绪标注 |
 | v0.3.0 | 2026-06-05 | 人物识别 + 对话提取 + 关系分析 |
 | v0.2.0 | 2026-06-05 | 基础转换能力（DeepSeek API、小说读取、转换器、CLI） |

@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -67,7 +68,7 @@ public class EmotionAnnotator {
         // 厌恶/恶心
         EMOTION_KEYWORDS.put(Beat.Emotion.disgusted, Arrays.asList(
             "恶心", "讨厌", "厌恶", "恶", "脏", "恶心地", "讨厌地",
-            "厌恶地", "恶心的", "讨厌的", "厌恶的", "呸", "啐",
+            "厌恶地", "恶心的", "讨厌的", "呸", "啐",
             "恶心", "讨厌", "真恶心", "太讨厌"
         ));
 
@@ -119,7 +120,7 @@ public class EmotionAnnotator {
      */
     public Beat.Emotion analyzeEmotion(String text) {
         Map<Beat.Emotion, Integer> scores = new HashMap<>();
-        
+
         // 1. 关键词匹配
         for (Map.Entry<Beat.Emotion, List<String>> entry : EMOTION_KEYWORDS.entrySet()) {
             int score = 0;
@@ -128,10 +129,10 @@ public class EmotionAnnotator {
             }
             scores.put(entry.getKey(), score);
         }
-        
+
         // 2. 标点符号分析
         analyzePunctuation(text, scores);
-        
+
         // 3. 找出得分最高的情绪
         return scores.entrySet().stream()
             .max(Map.Entry.comparingByValue())
@@ -149,12 +150,12 @@ public class EmotionAnnotator {
             int count = countOccurrences(text, "?") + countOccurrences(text, "？");
             scores.merge(Beat.Emotion.surprised, count, Integer::sum);
         }
-        
+
         // 多个问号 -> 更惊讶
         if (MULTI_QUESTION.matcher(text).find()) {
             scores.merge(Beat.Emotion.surprised, 2, Integer::sum);
         }
-        
+
         // 感叹号 -> 强烈情绪（愤怒/开心/惊讶）
         if (EXCLAMATION_MARK.matcher(text).find()) {
             int count = countOccurrences(text, "!") + countOccurrences(text, "！");
@@ -163,14 +164,14 @@ public class EmotionAnnotator {
             scores.merge(Beat.Emotion.surprised, count, Integer::sum);
             scores.merge(Beat.Emotion.happy, count, Integer::sum);
         }
-        
+
         // 多个感叹号 -> 更强烈
         if (MULTI_EXCLAMATION.matcher(text).find()) {
             scores.merge(Beat.Emotion.angry, 2, Integer::sum);
             scores.merge(Beat.Emotion.surprised, 2, Integer::sum);
             scores.merge(Beat.Emotion.happy, 2, Integer::sum);
         }
-        
+
         // 省略号 -> 犹豫/思考
         if (ELLIPSIS.matcher(text).find()) {
             scores.merge(Beat.Emotion.neutral, 1, Integer::sum);
@@ -186,13 +187,13 @@ public class EmotionAnnotator {
      */
     public Beat.Intensity analyzeIntensity(String text, Beat.Emotion emotion) {
         int intensityScore = 0;
-        
+
         // 1. 关键词数量
-        List<String> keywords = EMOTION_KEYWORDS.getOrDefault(emotion, List.of());
+        List<String> keywords = EMOTION_KEYWORDS.getOrDefault(emotion, new ArrayList<>());
         for (String keyword : keywords) {
             intensityScore += countOccurrences(text, keyword);
         }
-        
+
         // 2. 标点符号
         if (MULTI_EXCLAMATION.matcher(text).find()) {
             intensityScore += 2;
@@ -200,7 +201,7 @@ public class EmotionAnnotator {
         if (EXCLAMATION_MARK.matcher(text).find()) {
             intensityScore += 1;
         }
-        
+
         // 3. 根据分数判断强度
         if (intensityScore <= 1) {
             return Beat.Intensity.low;
@@ -248,7 +249,7 @@ public class EmotionAnnotator {
     }
 
     /**
-     * 获得情绪图标
+     * 获得情绪表情符号
      *
      * @param emotion 情绪
      * @return 表情符号
