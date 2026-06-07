@@ -18,7 +18,7 @@ public class CharacterAnalyzer {
 
     private static final Logger logger = LoggerFactory.getLogger(CharacterAnalyzer.class);
 
-    // 常见姓氏列表（用于识别人物）
+    // 常见姓氏列表
     private static final Set<String> COMMON_SURNAMES = new HashSet<>(Arrays.asList(
         "张", "王", "李", "赵", "刘", "陈", "杨", "黄", "周", "吴",
         "徐", "孙", "马", "朱", "胡", "郭", "何", "林", "高", "罗",
@@ -27,169 +27,198 @@ public class CharacterAnalyzer {
         "叶", "蒋", "杜", "苏", "魏", "程", "吕", "丁", "沈", "任"
     ));
 
-    // 常见称呼词
-    private static final Set<String> TITLE_WORDS = new HashSet<>(Arrays.asList(
-        "先生", "小姐", "女士", "老师", "同学", "老板", "经理", "医生", "服务员", "客人"
+    // 需要去掉的修饰词（人名后面常接的词）
+    private static final Set<String> STOP_WORDS_AFTER = new HashSet<>(Arrays.asList(
+        "说", "道", "问", "答", "喊", "叫", "笑", "哭", "小声", "大声",
+        "轻轻", "慢慢", "高兴", "生气", "难过", "开心", "惊讶", "疑惑",
+        "轻声", "大声", "温柔", "严厉", "温和", "愤怒", "开心", "难过",
+        "突然", "忽然", "立刻", "马上", "赶紧", "连忙", "急忙", "迅速",
+        "笑着", "说道", "问道", "答道", "喊道", "叫道", "感叹", "叹息",
+        "的", "了", "着", "过", "吗", "呢", "吧", "啊", "呀", "啦"
     ));
 
-    // 模式1：XX说/道/问/答/喊
-    private static final Pattern SAY_PATTERN = Pattern.compile(
-        "([\\u4e00-\\u9fa5]{2,4})[说问道答叫喊问]");
-
-    // 模式2："..."XX说
-    private static final Pattern QUOTE_SAY_PATTERN = Pattern.compile(
-        "[\"\"''「」](.+?)[\"\"''「」]\\s*[，,。.！!？?\\s]*([\\u4e00-\\u9fa5]{2,4})[说问道答叫喊]");
-
-    // 模式3：XX："..."
-    private static final Pattern COLON_PATTERN = Pattern.compile(
-        "([\\u4e00-\\u9fa5]{2,4})[：:]\\s*[\"\"''「」]");
-
-    // 禁止词列表
-    private static final Set<String> STOP_WORDS = new HashSet<>(Arrays.asList(
-        "慢慢", "什么", "怎么", "这个", "那个", "我们", "你们", "他们", "她们", "大家",
-        "自己", "别人", "知道", "看到", "听到", "想到", "感到", "觉得", "认为",
-        "但是", "不过", "可是", "只是", "还是", "已经", "还是", "还是", "还有",
-        "起来", "下来", "过来", "进去", "出来", "回来", "起来", "起来", "起来",
-        "今天", "明天", "昨天", "昨天", "刚才", "现在", "时候", "地方", "事情"
+    // 单个汉字的姓列表（用于验证）
+    private static final Set<String> SINGLE_SURNAMES = new HashSet<>(Arrays.asList(
+        "张", "王", "李", "赵", "刘", "陈", "杨", "黄", "周", "吴",
+        "徐", "孙", "马", "朱", "胡", "郭", "何", "林", "高", "罗",
+        "郑", "梁", "谢", "宋", "唐", "许", "韩", "冯", "邓", "曹"
     ));
+
+    // 已知的固定角色名（避免被清洗）
+    private static final Set<String> KNOWN_CHARACTERS = new HashSet<>(Arrays.asList(
+        "服务员", "风衣男人", "神秘女人", "老人", "小孩", "青年",
+        "中年", "老板", "经理", "老师", "医生", "警察", "司机"
+    ));
+
+    // 提取名字的正则表达式
+    private static final Pattern NAME_PATTERN = Pattern.compile(
+        "([\u4e00-\u9fa5]{2,5})[说道问道喊问笑哭道惊]|[\u4e00-\u9fa5\"\"''「」](.+?)[\"\"''「」]\\s*[，,。.！!？?\\s]*([\u4e00-\u9fa5]{2,5})[说道问道喊问笑哭]|([\u4e00-\u9fa5]{2,5})[：:]"
+    );
+
+    // 简单的名字出现匹配模式（用于统计频率）
+    private static final Pattern SIMPLE_NAME_PATTERN = Pattern.compile(
+        "([\u4e00-\u9fa5]{2,5})"
+    );
 
     /**
      * 分析小说文本，提取人物信息
      */
     public List<CharacterInfo> analyzeCharacters(String text) {
         logger.info("开始分析人物信息...");
-        
-        Set<String> potentialNames = extractPotentialNames(text);
-        Map<String, Integer> nameFrequency = calculateNameFrequency(text, potentialNames);
-        List<CharacterInfo> characters = buildCharacterList(nameFrequency);
-        
-        logger.info("人物分析完成，共识别 {} 个人物: {}", characters.size(), 
-            characters.stream().map(CharacterInfo::getName).toList());
-        
+
+        // 1. 先提取所有可能的候选名字
+        Set<String> candidateNames = extractCandidateNames(text);
+
+        // 2. 清洗和去重
+        Map<String, Integer> cleanedNames = cleanAndDeduplicate(candidateNames, text);
+
+        // 3. 构建结果
+        List<CharacterInfo> characters = buildCharacterList(cleanedNames);
+
+        logger.info("人物分析完成，共识别 {} 个人物: {}", characters.size(),
+                characters.stream().map(CharacterInfo::getName).toList());
+
         return characters;
     }
 
     /**
-     * 提取潜在的人名
+     * 提取候选名字
      */
-    private Set<String> extractPotentialNames(String text) {
+    private Set<String> extractCandidateNames(String text) {
         Set<String> names = new LinkedHashSet<>();
-        
-        // 模式1：XX说、XX道
-        Matcher sayMatcher = SAY_PATTERN.matcher(text);
-        while (sayMatcher.find()) {
-            String name = sayMatcher.group(1);
-            if (isValidName(name)) {
-                names.add(name);
+
+        // 逐行处理，更准确
+        String[] lines = text.split("\n");
+        for (String line : lines) {
+            if (line.trim().isEmpty()) continue;
+
+            // 模式1：XX说/道/问/答/喊
+            Matcher m1 = NAME_PATTERN.matcher(line);
+            while (m1.find()) {
+                for (int i = 1; i <= m1.groupCount(); i++) {
+                    String name = m1.group(i);
+                    if (name != null && isValidCandidateName(name)) {
+                        names.add(cleanName(name));
+                    }
+                }
             }
         }
-        
-        // 模式2："..."XX说
-        Matcher quoteMatcher = QUOTE_SAY_PATTERN.matcher(text);
-        while (quoteMatcher.find()) {
-            String name = quoteMatcher.group(2);
-            if (isValidName(name)) {
-                names.add(name);
-            }
-        }
-        
-        // 模式3：XX："..."
-        Matcher colonMatcher = COLON_PATTERN.matcher(text);
-        while (colonMatcher.find()) {
-            String name = colonMatcher.group(1);
-            if (isValidName(name)) {
-                names.add(name);
-            }
-        }
-        
-        // 额外检查：添加一些常见的称呼
+
+        // 补充一些常见角色
         if (text.contains("服务员")) {
             names.add("服务员");
         }
-        if (text.contains("男人")) {
+        if (text.contains("风衣男人")) {
             names.add("风衣男人");
         }
-        if (text.contains("女人")) {
+        if (text.contains("神秘女人")) {
             names.add("神秘女人");
         }
-        
+
         return names;
     }
 
     /**
-     * 判断是否是有效的名字
+     * 验证候选名字的有效性
      */
-    private boolean isValidName(String text) {
-        if (text == null || text.length() < 2 || text.length() > 5) {
+    private boolean isValidCandidateName(String name) {
+        if (name == null || name.trim().isEmpty()) return false;
+
+        name = name.trim();
+
+        // 长度必须在2-5之间
+        if (name.length() < 2 || name.length() > 5) return false;
+
+        // 必须全是汉字
+        if (!name.matches("[\u4e00-\u9fa5]+")) return false;
+
+        // 如果是已知的角色，直接通过
+        if (KNOWN_CHARACTERS.contains(name)) return true;
+
+        // 第一个字必须是常见姓氏（除非是已知角色）
+        String firstChar = name.substring(0, 1);
+        if (!SINGLE_SURNAMES.contains(firstChar)) {
             return false;
         }
-        
-        // 排除禁止词
-        if (STOP_WORDS.contains(text)) {
-            return false;
-        }
-        
-        // 检查是否全是汉字
-        if (!text.matches("[\\u4e00-\\u9fa5]+")) {
-            return false;
-        }
-        
-        // 检查是否包含姓氏
-        if (text.length() >= 2) {
-            String firstChar = text.substring(0, 1);
-            if (COMMON_SURNAMES.contains(firstChar)) {
-                return true;
-            }
-        }
-        
-        // 检查是否是称呼词
-        for (String title : TITLE_WORDS) {
-            if (text.contains(title)) {
-                return true;
-            }
-        }
-        
-        // 特殊情况：王小明、李雪这种名字
-        if (text.equals("王小明") || text.equals("李雪") || 
-            text.equals("服务员") || text.equals("风衣男人") || 
-            text.equals("神秘女人")) {
-            return true;
-        }
-        
-        return false;
+
+        return true;
     }
 
     /**
-     * 计算名字出现频率
+     * 清洗名字，去掉后面的修饰词
      */
-    private Map<String, Integer> calculateNameFrequency(String text, Set<String> names) {
-        Map<String, Integer> frequency = new LinkedHashMap<>();
-        
-        for (String name : names) {
-            Pattern pattern = Pattern.compile(Pattern.quote(name));
-            Matcher matcher = pattern.matcher(text);
-            int count = 0;
-            while (matcher.find()) {
-                count++;
-            }
-            if (count > 0) {
-                frequency.put(name, count);
+    private String cleanName(String name) {
+        if (name == null) return null;
+
+        name = name.trim();
+
+        // 如果是已知角色，直接返回
+        if (KNOWN_CHARACTERS.contains(name)) {
+            return name;
+        }
+
+        // 尝试从后往前去掉停用词，直到得到一个看起来像名字的
+        String cleaned = name;
+        for (int i = name.length(); i >= 2; i--) {
+            String candidate = name.substring(0, i);
+            if (isValidCandidateName(candidate)) {
+                // 检查候选名字是否后面跟着停用词
+                String suffix = name.length() > i ? name.substring(i) : "";
+                boolean endsWithStopWord = false;
+                for (String stopWord : STOP_WORDS_AFTER) {
+                    if (suffix.startsWith(stopWord)) {
+                        endsWithStopWord = true;
+                        break;
+                    }
+                }
+                if (endsWithStopWord) {
+                    cleaned = candidate;
+                    break;
+                }
             }
         }
-        
-        return frequency;
+
+        return cleaned;
+    }
+
+    /**
+     * 清洗和去重，统计频率
+     */
+    private Map<String, Integer> cleanAndDeduplicate(Set<String> candidates, String text) {
+        Map<String, Integer> nameCount = new LinkedHashMap<>();
+
+        // 先把候选名字按清洗后分组
+        Map<String, Set<String>> nameGroups = new HashMap<>();
+        for (String candidate : candidates) {
+            String cleaned = cleanName(candidate);
+            nameGroups.computeIfAbsent(cleaned, k -> new LinkedHashSet<>()).add(candidate);
+        }
+
+        // 统计每个清洗后名字的出现频率
+        for (String cleanedName : nameGroups.keySet()) {
+            int count = 0;
+            Pattern p = Pattern.compile(Pattern.quote(cleanedName));
+            Matcher m = p.matcher(text);
+            while (m.find()) count++;
+
+            if (count >= 2) { // 至少出现2次才认为是角色
+                nameCount.put(cleanedName, count);
+            }
+        }
+
+        return nameCount;
     }
 
     /**
      * 构建人物列表
      */
-    private List<CharacterInfo> buildCharacterList(Map<String, Integer> frequency) {
+    private List<CharacterInfo> buildCharacterList(Map<String, Integer> nameCount) {
         List<CharacterInfo> characters = new ArrayList<>();
-        
+
         // 按频率排序
-        List<Map.Entry<String, Integer>> sorted = new ArrayList<>(frequency.entrySet());
+        List<Map.Entry<String, Integer>> sorted = new ArrayList<>(nameCount.entrySet());
         sorted.sort((a, b) -> b.getValue().compareTo(a.getValue()));
-        
+
         int index = 1;
         for (Map.Entry<String, Integer> entry : sorted) {
             CharacterInfo info = new CharacterInfo();
@@ -197,10 +226,9 @@ public class CharacterAnalyzer {
             info.setName(entry.getKey());
             info.setFrequency(entry.getValue());
             info.setRole(determineRole(entry.getValue(), index - 1));
-            
             characters.add(info);
         }
-        
+
         return characters;
     }
 
