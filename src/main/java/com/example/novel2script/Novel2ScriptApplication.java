@@ -27,7 +27,7 @@ public class Novel2ScriptApplication {
     @Bean
     public CommandLineRunner run(ApplicationConfig config) {
         return args -> {
-            logger.info("=== AI小说转剧本工具 v0.1.0 ===");
+            logger.info("=== AI小说转剧本工具 v1.4.0 ===");
             logger.info("Schema版本: {}", config.getSchema().getVersion());
             logger.info("AI提供商: {}", config.getAi().getProvider());
             logger.info("输出格式: {}", config.getOutput().getFormat());

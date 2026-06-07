@@ -2,13 +2,13 @@
   <div class="app-container">
     <!-- Header -->
     <header class="app-header">
-      <div class="header-content">
-        <h1>
-          <span class="icon">📖</span>
-          AI小说转剧本工具
-        </h1>
-        <span class="version-badge">v1.3</span>
-      </div>
+        <div class="header-content">
+            <h1>
+                <span class="icon">📖</span>
+                AI小说转剧本工具
+            </h1>
+            <span class="version-badge">v1.4</span>
+        </div>
     </header>
 
     <!-- Main Content -->
