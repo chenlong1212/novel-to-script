@@ -1036,6 +1036,7 @@ body {
   font-size: 0.9rem;
   line-height: 1.6;
   background: #f9fafb;
+  color: #1f2937;
 }
 
 /* States */

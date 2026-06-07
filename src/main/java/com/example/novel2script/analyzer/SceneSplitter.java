@@ -21,15 +21,24 @@ public class SceneSplitter {
 
     private static final Logger logger = LoggerFactory.getLogger(SceneSplitter.class);
 
-    // 地点关键词
+    // 地点关键词（移除过于宽泛的词，如"在"、"走"等）
     private static final List<String> LOCATION_KEYWORDS = Arrays.asList(
-        "来到", "走到", "进入", "到了", "来到", "进入", "走", "来到", 
-        "回到", "前往", "来到", "到达", "站在", "坐在", "在", "房间", 
-        "客厅", "厨房", "卧室", "书房", "餐厅", "客厅", "办公室", 
-        "会议室", "教室", "医院", "学校", "公园", "咖啡厅", "餐厅", 
-        "酒店", "旅馆", "机场", "火车站", "地铁站", "路上", "车里",
-        "楼下", "楼上", "门外", "门内", "窗边", "阳台", "花园", "院子",
-        "商场", "超市", "市场", "广场", "街道", "巷子里", "胡同里"
+        // 地点前缀词
+        "来到", "走进", "进入", "回到", "前往", "到达", "抵达",
+        "站在", "坐在", "躺在", "蹲在",
+        // 具体场所
+        "房间", "客厅", "厨房", "卧室", "书房", "餐厅", "厕所", "卫生间", "浴室", "阳台", "走廊", "楼梯",
+        "办公室", "会议室", "教室", "实验室", "图书馆", "阅览室",
+        "医院", "诊所", "药店", "学校", "学院", "大学", "操场", "体育馆",
+        "公园", "广场", "街道", "巷子", "胡同", "小路", "大道", "马路",
+        "咖啡厅", "餐厅", "酒吧", "KTV", "电影院", "剧院", "商场", "超市", "市场", "便利店",
+        "酒店", "旅馆", "民宿", "宿舍", "公寓", "别墅", "住宅",
+        "机场", "火车站", "汽车站", "地铁站", "码头", "站台",
+        "车里", "车上", "车外", "路上", "途中", "路边",
+        "门口", "窗外", "墙边", "角落", "花园", "院子", "门前", "门外",
+        // 地名后缀
+        "公司", "工厂", "银行", "法院", "警局", "监狱",
+        "店", "铺", "馆", "楼", "层", "栋", "座"
     );
 
     // 时间关键词
@@ -120,7 +129,7 @@ public class SceneSplitter {
             int end = splitPoints.get(i);
             String sceneText = text.substring(start, end).trim();
             
-            if (sceneText.length() > 50) { // 过滤太短的场景
+            if (sceneText.length() > 20) { // 降低场景长度要求
                 SceneInfo scene = analyzeScene(sceneText, i + 1);
                 scenes.add(scene);
             }
@@ -131,10 +140,16 @@ public class SceneSplitter {
         // 6. 处理最后一段
         if (start < text.length()) {
             String sceneText = text.substring(start).trim();
-            if (sceneText.length() > 50) {
+            if (sceneText.length() > 20) {
                 SceneInfo scene = analyzeScene(sceneText, scenes.size() + 1);
                 scenes.add(scene);
             }
+        }
+        
+        // 7. 如果没有识别到任何场景，将整个文本作为一个场景
+        if (scenes.isEmpty()) {
+            SceneInfo scene = analyzeScene(text.trim(), 1);
+            scenes.add(scene);
         }
         
         logger.info("场景分割完成，共识别 {} 个场景", scenes.size());
@@ -194,8 +209,8 @@ public class SceneSplitter {
         
         int last = 0;
         for (int point : sorted) {
-            // 过滤太近的分割点（至少间隔500字）
-            if (point - last >= 500 && point < maxLength) {
+            // 过滤太近的分割点（至少间隔100字，更适合短文本）
+            if (point - last >= 100 && point < maxLength) {
                 filtered.add(point);
                 last = point;
             }
@@ -231,22 +246,123 @@ public class SceneSplitter {
     }
 
     /**
-     * 提取地点
+     * 提取地点（改进版）
+     * 优先提取完整的地点描述，其次提取具体的场所名词
      */
     private String extractLocation(String text) {
-        Matcher matcher = LOCATION_PATTERN.matcher(text);
+        // 1. 先尝试提取完整的"在XXX"或"来到XXX"等完整描述
+        Pattern fullLocation = Pattern.compile("(在|来到|走进|进入|回到|前往|到达|抵达|站在|坐在|躺在)([\\u4e00-\\u9fa5a-zA-Z0-9]{2,15})(里|中|内|旁|边|上|下|外|处|前|后|间|对面|附近|旁边|中央|中间|东边|西边|南边|北边|左侧|右侧)");
+        Matcher matcher = fullLocation.matcher(text);
         if (matcher.find()) {
-            return matcher.group();
+            String location = matcher.group(0);
+            // 过滤掉太通用的组合
+            if (!isTooGenericLocation(location)) {
+                return location;
+            }
         }
-        
-        // 尝试关键词匹配
-        for (String keyword : LOCATION_KEYWORDS) {
+
+        // 2. 尝试提取"XXX里/中"格式
+        Pattern locationPattern = Pattern.compile("([\\u4e00-\\u9fa5]{2,8})(里|中|内|旁|边|上|下|外|处|前|后)");
+        matcher = locationPattern.matcher(text);
+        while (matcher.find()) {
+            String location = matcher.group(0);
+            String coreLocation = matcher.group(1);
+            if (!isTooGeneric(coreLocation) && isSpecificLocation(coreLocation)) {
+                return location;
+            }
+        }
+
+        // 3. 提取具体场所关键词（按优先级排序）
+        List<String> priorityKeywords = Arrays.asList(
+            "办公室", "会议室", "教室", "实验室", "图书馆", "阅览室",
+            "医院", "诊所", "药店", "学校", "学院", "大学", "操场", "体育馆",
+            "公园", "广场", "商场", "超市", "市场", "便利店",
+            "咖啡厅", "餐厅", "酒吧", "酒店", "旅馆", "民宿",
+            "机场", "火车站", "汽车站", "地铁站", "码头",
+            "房间", "客厅", "厨房", "卧室", "书房", "餐厅", "浴室", "阳台",
+            "街道", "巷子", "胡同", "小路", "大道",
+            "车里", "车上", "门口", "窗外"
+        );
+
+        for (String keyword : priorityKeywords) {
             if (text.contains(keyword)) {
+                // 尝试获取更完整的上下文
+                int index = text.indexOf(keyword);
+                String context = getLocationContext(text, index, keyword);
+                if (context != null) {
+                    return context;
+                }
                 return keyword;
             }
         }
-        
-        return "未知地点";
+
+        // 4. 如果还是找不到，返回未知地点
+        return "未识别地点";
+    }
+
+    /**
+     * 检查是否是过于通用的地点描述
+     */
+    private boolean isTooGenericLocation(String location) {
+        List<String> genericPatterns = Arrays.asList(
+            "在那里", "在这里", "在那里边", "在这里边",
+            "在地上", "在天上", "在路上", "在车里",
+            "在这", "在那"
+        );
+        for (String pattern : genericPatterns) {
+            if (location.equals(pattern) || location.endsWith(pattern)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 检查核心词是否过于通用
+     */
+    private boolean isTooGeneric(String word) {
+        List<String> genericWords = Arrays.asList(
+            "这", "那", "这", "这", "这", "那里", "这里",
+            "地上", "天下", "路上", "海里", "山里", "水里",
+            "家里", "家", "路上", "旁边", "附近"
+        );
+        return genericWords.contains(word) || word.length() < 2;
+    }
+
+    /**
+     * 检查是否是具体的地点名词
+     */
+    private boolean isSpecificLocation(String word) {
+        // 检查是否包含地点关键词
+        for (String keyword : LOCATION_KEYWORDS) {
+            if (word.contains(keyword) || keyword.contains(word)) {
+                return true;
+            }
+        }
+        // 检查是否是常见地名特征词
+        return word.matches(".*[城|市|镇|村|街|路|道|店|馆|楼|房|室|院|堂|所|站|场|馆].*");
+    }
+
+    /**
+     * 获取地点的上下文信息
+     */
+    private String getLocationContext(String text, int keywordIndex, String keyword) {
+        // 向前查找最多20个字符
+        int start = Math.max(0, keywordIndex - 15);
+        // 向后查找最多10个字符
+        int end = Math.min(text.length(), keywordIndex + keyword.length() + 5);
+
+        String context = text.substring(start, end);
+
+        // 匹配"在XXX"或"来到XXX"等模式
+        Pattern contextPattern = Pattern.compile("(在|来到|走进|进入|回到|前往|到达)([\\u4e00-\\u9fa5a-zA-Z0-9]{1,10})?" + Pattern.quote(keyword));
+        Matcher matcher = contextPattern.matcher(context);
+        if (matcher.find()) {
+            return matcher.group(0);
+        }
+
+        // 如果没有匹配到完整模式，只返回关键词
+        return keyword;
     }
 
     /**

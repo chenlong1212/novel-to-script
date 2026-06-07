@@ -31,17 +31,44 @@ public class CharacterAnalyzer {
     private static final Set<String> STOP_WORDS_AFTER = new HashSet<>(Arrays.asList(
         "说", "道", "问", "答", "喊", "叫", "笑", "哭", "小声", "大声",
         "轻轻", "慢慢", "高兴", "生气", "难过", "开心", "惊讶", "疑惑",
-        "轻声", "大声", "温柔", "严厉", "温和", "愤怒", "开心", "难过",
-        "突然", "忽然", "立刻", "马上", "赶紧", "连忙", "急忙", "迅速",
-        "笑着", "说道", "问道", "答道", "喊道", "叫道", "感叹", "叹息",
-        "的", "了", "着", "过", "吗", "呢", "吧", "啊", "呀", "啦"
+        "轻声", "温柔", "严厉", "温和", "愤怒", "突然", "忽然", "立刻", "马上", 
+        "赶紧", "连忙", "急忙", "迅速", "笑着", "说道", "问道", "答道", "喊道", 
+        "叫道", "感叹", "叹息", "的", "了", "着", "过", "吗", "呢", "吧", "啊", "呀", "啦",
+        "想", "看", "听", "走", "站", "坐", "躺", "跑", "跳", "低", "高", "微", "悄", "低"
     ));
 
-    // 单个汉字的姓列表（用于验证）
-    private static final Set<String> SINGLE_SURNAMES = new HashSet<>(Arrays.asList(
-        "张", "王", "李", "赵", "刘", "陈", "杨", "黄", "周", "吴",
-        "徐", "孙", "马", "朱", "胡", "郭", "何", "林", "高", "罗",
-        "郑", "梁", "谢", "宋", "唐", "许", "韩", "冯", "邓", "曹"
+    // 绝对无效的词（绝对不可能是名字）
+    private static final Set<String> INVALID_WORDS = new HashSet<>(Arrays.asList(
+        // 人称代词
+        "我", "你", "他", "她", "它", "我们", "你们", "他们", "她们", "它们",
+        "咱", "咱们", "俺", "俺们", "您", "阁下",
+        // 指示代词
+        "这", "那", "这个", "那个", "这些", "那些", "这里", "那里", "这儿", "那儿",
+        // 疑问代词
+        "谁", "什么", "哪", "哪里", "哪个", "哪些", "怎么", "怎样", "为什么",
+        // 章节相关
+        "第", "章", "节", "卷", "部", "篇", "序", "前言", "后记", "第一章", "第二章", "第三章", "第四章", "第五章",
+        // 性别/年龄/身份泛指
+        "男", "女", "男人", "女人", "男孩", "女孩", "青年", "中年", "老年", "少年", "儿童",
+        "先生", "女士", "小姐", "夫人", "太太", "同学", "朋友",
+        // 方位词
+        "上", "下", "左", "右", "前", "后", "里", "外", "内", "中", "东", "西", "南", "北",
+        // 时间词
+        "今天", "明天", "昨天", "前天", "后天", "早上", "上午", "中午", "下午", "晚上", "夜里",
+        "现在", "刚才", "立刻", "马上", "突然", "忽然",
+        // 副词/形容词
+        "很", "非常", "特别", "十分", "极其", "比较", "更", "最", "太", "真", "好",
+        "新", "旧", "大", "小", "多", "少", "高", "矮", "胖", "瘦", "长", "短", "快", "慢",
+        // 其他
+        "的", "了", "着", "过", "在", "是", "有", "和", "就", "都", "也", "还", "又", "再",
+        "说", "道", "问", "答", "喊", "叫", "笑", "哭", "走", "跑", "看", "听", "想", "做",
+        "带", "来", "去", "到", "往", "从", "向", "给", "把", "被", "比", "跟", "同", "与",
+        "眼", "睛", "嘴", "脸", "手", "脚", "头", "身", "心",
+        "服", "务", "员", "医", "生", "老", "师", "学", "生", "工", "人", "农", "民",
+        "明", "着", "试", "探", "性", "地", "东", "西", "带", "来", "小", "心", "点",
+        "低", "声", "微", "笑", "点", "头", "眼", "中", "闪", "过", "了", "一", "丝",
+        "惊", "讶", "疑", "惑", "高", "兴", "难", "过", "生", "气", "愤", "怒",
+        "温", "柔", "严", "厉", "和", "蔼", "可", "亲", "冷", "淡", "平", "静"
     ));
 
     // 已知的固定角色名（避免被清洗）
@@ -50,14 +77,16 @@ public class CharacterAnalyzer {
         "中年", "老板", "经理", "老师", "医生", "警察", "司机"
     ));
 
-    // 提取名字的正则表达式
-    private static final Pattern NAME_PATTERN = Pattern.compile(
-        "([\u4e00-\u9fa5]{2,5})[说道问道喊问笑哭道惊]|[\u4e00-\u9fa5\"\"''「」](.+?)[\"\"''「」]\\s*[，,。.！!？?\\s]*([\u4e00-\u9fa5]{2,5})[说道问道喊问笑哭]|([\u4e00-\u9fa5]{2,5})[：:]"
+    // 对话模式：只识别 XX说/道/问/答/喊/叫 + 冒号/引号 这种明确的模式
+    private static final Pattern DIALOGUE_PATTERN = Pattern.compile(
+        "([\\u4e00-\\u9fa5]{2,4})(?:说|道|问|答|喊|叫|笑|哭)\\s*[：:\"「]",
+        Pattern.MULTILINE
     );
 
-    // 简单的名字出现匹配模式（用于统计频率）
-    private static final Pattern SIMPLE_NAME_PATTERN = Pattern.compile(
-        "([\u4e00-\u9fa5]{2,5})"
+    // 对话模式2：引号后接 XX说/道/问
+    private static final Pattern DIALOGUE_PATTERN_2 = Pattern.compile(
+        "[\"」]\\s*[，,。.！!？?]?\\s*([\\u4e00-\\u9fa5]{2,4})(?:说|道|问|答|喊|叫)",
+        Pattern.MULTILINE
     );
 
     /**
@@ -87,32 +116,35 @@ public class CharacterAnalyzer {
     private Set<String> extractCandidateNames(String text) {
         Set<String> names = new LinkedHashSet<>();
 
-        // 逐行处理，更准确
+        // 逐行处理
         String[] lines = text.split("\n");
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
 
-            // 模式1：XX说/道/问/答/喊
-            Matcher m1 = NAME_PATTERN.matcher(line);
+            // 模式1：XX说："..." 或 XX说"..."
+            Matcher m1 = DIALOGUE_PATTERN.matcher(line);
             while (m1.find()) {
-                for (int i = 1; i <= m1.groupCount(); i++) {
-                    String name = m1.group(i);
-                    if (name != null && isValidCandidateName(name)) {
-                        names.add(cleanName(name));
-                    }
+                String name = m1.group(1);
+                if (name != null && isValidCandidateName(name)) {
+                    names.add(name);
+                }
+            }
+
+            // 模式2："...",XX说 或 "..."XX道
+            Matcher m2 = DIALOGUE_PATTERN_2.matcher(line);
+            while (m2.find()) {
+                String name = m2.group(1);
+                if (name != null && isValidCandidateName(name)) {
+                    names.add(name);
                 }
             }
         }
 
-        // 补充一些常见角色
-        if (text.contains("服务员")) {
-            names.add("服务员");
-        }
-        if (text.contains("风衣男人")) {
-            names.add("风衣男人");
-        }
-        if (text.contains("神秘女人")) {
-            names.add("神秘女人");
+        // 补充一些已知的固定角色
+        for (String knownChar : KNOWN_CHARACTERS) {
+            if (text.contains(knownChar)) {
+                names.add(knownChar);
+            }
         }
 
         return names;
@@ -122,23 +154,64 @@ public class CharacterAnalyzer {
      * 验证候选名字的有效性
      */
     private boolean isValidCandidateName(String name) {
-        if (name == null || name.trim().isEmpty()) return false;
+        if (name == null || name.trim().isEmpty()) {
+            return false;
+        }
 
         name = name.trim();
 
-        // 长度必须在2-5之间
-        if (name.length() < 2 || name.length() > 5) return false;
+        // 长度必须在2-4之间（2-4个字的名字比较合理）
+        if (name.length() < 2 || name.length() > 4) {
+            return false;
+        }
 
         // 必须全是汉字
-        if (!name.matches("[\u4e00-\u9fa5]+")) return false;
+        if (!name.matches("[\u4e00-\u9fa5]+")) {
+            return false;
+        }
+
+        // 检查是否是绝对无效词
+        if (INVALID_WORDS.contains(name)) {
+            return false;
+        }
 
         // 如果是已知的角色，直接通过
-        if (KNOWN_CHARACTERS.contains(name)) return true;
+        if (KNOWN_CHARACTERS.contains(name)) {
+            return true;
+        }
 
-        // 第一个字必须是常见姓氏（除非是已知角色）
+        // 检查是否包含无效词（比如"笑着说"被识别成"笑着"）
+        for (String invalidWord : INVALID_WORDS) {
+            if (name.equals(invalidWord) || name.startsWith(invalidWord) || name.endsWith(invalidWord)) {
+                // 如果只是以无效词开头或结尾，但整体合理的话，还是可以接受
+                // 但如果等于无效词，就直接拒绝
+                if (name.equals(invalidWord)) {
+                    return false;
+                }
+            }
+        }
+
+        // 对于老X或小X这种称呼，特殊处理
+        if ((name.startsWith("老") || name.startsWith("小")) && name.length() == 2) {
+            // 第二个字不能是无效词
+            String secondChar = name.substring(1, 2);
+            if (!INVALID_WORDS.contains(secondChar)) {
+                return true;
+            }
+        }
+
+        // 第一个字最好是常见姓氏（可以适当放宽，但必须至少合理）
         String firstChar = name.substring(0, 1);
-        if (!SINGLE_SURNAMES.contains(firstChar)) {
-            return false;
+        if (COMMON_SURNAMES.contains(firstChar)) {
+            return true;
+        }
+
+        // 即使不是常见姓氏，如果长度是2-3个字，也接受（可能是名字）
+        // 但需要再次确认不包含无效词
+        for (String invalidWord : INVALID_WORDS) {
+            if (name.contains(invalidWord)) {
+                return false;
+            }
         }
 
         return true;
@@ -159,10 +232,12 @@ public class CharacterAnalyzer {
 
         // 尝试从后往前去掉停用词，直到得到一个看起来像名字的
         String cleaned = name;
+        
+        // 从最长的可能开始，逐步缩短
         for (int i = name.length(); i >= 2; i--) {
             String candidate = name.substring(0, i);
             if (isValidCandidateName(candidate)) {
-                // 检查候选名字是否后面跟着停用词
+                // 检查候选名字后面是否跟着停用词
                 String suffix = name.length() > i ? name.substring(i) : "";
                 boolean endsWithStopWord = false;
                 for (String stopWord : STOP_WORDS_AFTER) {
@@ -171,7 +246,7 @@ public class CharacterAnalyzer {
                         break;
                     }
                 }
-                if (endsWithStopWord) {
+                if (endsWithStopWord || i == name.length()) {
                     cleaned = candidate;
                     break;
                 }
@@ -187,22 +262,33 @@ public class CharacterAnalyzer {
     private Map<String, Integer> cleanAndDeduplicate(Set<String> candidates, String text) {
         Map<String, Integer> nameCount = new LinkedHashMap<>();
 
-        // 先把候选名字按清洗后分组
-        Map<String, Set<String>> nameGroups = new HashMap<>();
+        // 先清洗所有候选
+        Set<String> validNames = new LinkedHashSet<>();
         for (String candidate : candidates) {
             String cleaned = cleanName(candidate);
-            nameGroups.computeIfAbsent(cleaned, k -> new LinkedHashSet<>()).add(candidate);
+            if (isValidCandidateName(cleaned)) {
+                validNames.add(cleaned);
+            }
         }
 
         // 统计每个清洗后名字的出现频率
-        for (String cleanedName : nameGroups.keySet()) {
+        for (String name : validNames) {
             int count = 0;
-            Pattern p = Pattern.compile(Pattern.quote(cleanedName));
+            // 使用更精确的匹配模式，确保匹配的是完整的名字
+            // 比如要匹配"张三"，不能匹配"张三说"里的"张三"
+            // 使用单词边界的概念（但中文没有空格，所以用上下文判断）
+            Pattern p = Pattern.compile("(?<![\\u4e00-\\u9fa5])" + Pattern.quote(name) + "(?![\\u4e00-\\u9fa5])");
             Matcher m = p.matcher(text);
             while (m.find()) count++;
+            
+            // 另外也统计一下"XXX说"这种模式
+            Pattern p2 = Pattern.compile(Pattern.quote(name) + "(?:说|道|问|答|喊|叫)");
+            Matcher m2 = p2.matcher(text);
+            while (m2.find()) count++;
 
-            if (count >= 2) { // 至少出现2次才认为是角色
-                nameCount.put(cleanedName, count);
+            // 至少出现2次才认为是角色（提高准确率）
+            if (count >= 2) {
+                nameCount.put(name, count);
             }
         }
 

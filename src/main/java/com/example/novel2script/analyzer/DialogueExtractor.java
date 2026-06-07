@@ -18,14 +18,14 @@ public class DialogueExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(DialogueExtractor.class);
 
-    // 模式1：XX说："..." 或者 "..."XX说
+    // 模式1：XX说："..." 或者 "..."XX说 - 接受1-4个字符的说话人
     private static final Pattern DIALOGUE_PATTERN = Pattern.compile(
-        "(?:([\\u4e00-\\u9fa5]{2,4})[说问道答叫喊问笑怒道惊]\\s*[：:]?\\s*)?[\"\"''「」]([^\"\"''「」]{2,100})[\"\"''「」](?:\\s*[,，。.！!？?]?\\s*([\\u4e00-\\u9fa5]{2,4})[说问道答叫喊问笑怒道惊]?)?",
+        "(?:([\\u4e00-\\u9fa5]{1,4})[说问道答叫喊问笑怒道惊]\\s*[：:]?\\s*)?[\"\"''「」]([^\"\"''「」]{1,100})[\"\"''「」](?:\\s*[,，。.！!？?]?\\s*([\\u4e00-\\u9fa5]{1,4})[说问道答叫喊问笑怒道惊]?)?",
         Pattern.DOTALL
     );
 
     /**
-     * 提取对话列表
+     * 提取对话列表 - 改进版
      */
     public List<DialogueInfo> extractDialogues(String text) {
         logger.info("开始提取对话信息...");
@@ -42,29 +42,59 @@ public class DialogueExtractor {
                 continue;
             }
             
-            // 提取对话
-            Matcher matcher = DIALOGUE_PATTERN.matcher(line);
+            boolean foundInLine = false;
             
-            while (matcher.find()) {
-                String speaker1 = matcher.group(1); // 前面的说话人
-                String content = matcher.group(2);  // 对话内容
-                String speaker2 = matcher.group(3); // 后面的说话人
-                
-                String speaker = speaker1 != null ? speaker1 : speaker2;
-                
-                if (speaker == null) {
-                    speaker = lastSpeaker; // 继承上一个说话人
-                } else {
-                    lastSpeaker = speaker; // 更新最后说话人
-                }
-                
-                if (content != null && content.trim().length() >= 2) {
+            // 模式 1: XX说："对话内容" 或 XX说"对话内容"
+            Pattern pattern1 = Pattern.compile("([\\u4e00-\\u9fa5]{1,4})[说问道答叫喊笑道惊]\\s*[：:]?\\s*[\"\"''「」]([^\"\"''「」]{1,100})[\"\"''「」]");
+            Matcher m1 = pattern1.matcher(line);
+            while (m1.find()) {
+                String speaker = m1.group(1);
+                String content = m1.group(2);
+                if (content != null && content.trim().length() >= 1) {
                     DialogueInfo info = new DialogueInfo();
-                    info.setSpeaker(speaker);
+                    info.setSpeaker(speaker != null ? speaker : lastSpeaker);
                     info.setContent(content.trim());
                     info.setEmotion(detectEmotion(content));
                     info.setType("dialogue");
                     dialogues.add(info);
+                    if (speaker != null) lastSpeaker = speaker;
+                    foundInLine = true;
+                }
+            }
+            
+            // 模式 2: "对话内容"XX说
+            Pattern pattern2 = Pattern.compile("[\"\"''「」]([^\"\"''「」]{1,100})[\"\"''「」]\\s*[,，。.！!？?]?\\s*([\\u4e00-\\u9fa5]{1,4})[说问道答叫喊笑道惊]");
+            Matcher m2 = pattern2.matcher(line);
+            while (m2.find()) {
+                String content = m2.group(1);
+                String speaker = m2.group(2);
+                if (content != null && content.trim().length() >= 1) {
+                    DialogueInfo info = new DialogueInfo();
+                    info.setSpeaker(speaker != null ? speaker : lastSpeaker);
+                    info.setContent(content.trim());
+                    info.setEmotion(detectEmotion(content));
+                    info.setType("dialogue");
+                    dialogues.add(info);
+                    if (speaker != null) lastSpeaker = speaker;
+                    foundInLine = true;
+                }
+            }
+            
+            // 模式 3: 只有对话内容，没有说话人标记（继承上一个说话人）
+            if (!foundInLine) {
+                Pattern pattern3 = Pattern.compile("[\"\"''「」]([^\"\"''「」]{1,100})[\"\"''「」]");
+                Matcher m3 = pattern3.matcher(line);
+                while (m3.find()) {
+                    String content = m3.group(1);
+                    if (content != null && content.trim().length() >= 1) {
+                        DialogueInfo info = new DialogueInfo();
+                        info.setSpeaker(lastSpeaker);
+                        info.setContent(content.trim());
+                        info.setEmotion(detectEmotion(content));
+                        info.setType("dialogue");
+                        dialogues.add(info);
+                        foundInLine = true;
+                    }
                 }
             }
         }

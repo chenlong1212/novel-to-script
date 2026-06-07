@@ -1,6 +1,6 @@
 # AI 小说转剧本工具
 
-> 将小说文本自动转换为结构化剧本（YAML格式），帮助作者快速获得可编辑的剧本初稿。
+demo演示链接：[https://www.bilibili.com/video/BV1zEEh6KEGK/?share_source=copy_web&vd_source=ce6dbec8730d45ad0df75a2e415c4376](https://www.bilibili.com/video/BV1zEEh6KEGK/?share_source=copy_web&vd_source=ce6dbec8730d45ad0df75a2e415c4376)
 
 ## 技术栈
 
@@ -12,34 +12,6 @@
 | 构建工具 | Maven | 3.9+ |
 | 测试 | JUnit 5 | 5.10+ |
 
-## 项目状态
-
-**当前版本：v1.0.0**
-
-已完成：
-- ✅ YAML Schema 定义文档
-- ✅ 项目基础结构（Spring Boot）
-- ✅ 配置文件设计
-- ✅ 数据模型（Script、Character、Scene、Beat等）
-- ✅ 基础工具函数（IDGenerator）
-- ✅ DeepSeek API 客户端
-- ✅ 小说文件读取器
-- ✅ 核心转换逻辑
-- ✅ 命令行接口
-- ✅ 智能人物识别
-- ✅ 对话提取和情绪检测
-- ✅ 人物关系分析
-- ✅ 分析管理器
-- ✅ 场景分割（v0.4新增）
-- ✅ 情绪标注增强（v0.4新增）
-- ✅ 质量评估（v0.5新增）
-- ✅ 人工校对和修正功能（v0.5新增）
-- ✅ **可视化Web界面（v1.0新增）**
-- ✅ **REST API后端接口（v1.0新增）**
-- ✅ **全局异常处理（v1.0新增）**
-
-后续版本计划：
-- v1.0: 完整功能 + 生产就绪
 
 ## 项目结构
 
@@ -56,15 +28,15 @@ novel-to-script/
 │   │   │   │   ├── Scene.java
 │   │   │   │   ├── Beat.java
 │   │   │   │   └── ...
-│   │   │   ├── analyzer/          # 分析器
-│   │   │   │   ├── CharacterAnalyzer.java  # 人物识别
-│   │   │   │   ├── DialogueExtractor.java  # 对话提取
+│   │   │   ├── analyzer/          # 分析器（v1.4重点改进）
+│   │   │   │   ├── CharacterAnalyzer.java  # 人物识别（改进）
+│   │   │   │   ├── DialogueExtractor.java  # 对话提取（重构）
 │   │   │   │   ├── RelationshipAnalyzer.java # 关系分析
-│   │   │   │   ├── SceneSplitter.java      # 场景分割
+│   │   │   │   ├── SceneSplitter.java      # 场景分割（优化）
 │   │   │   │   ├── EmotionAnnotator.java   # 情绪标注
 │   │   │   │   ├── QualityEvaluator.java   # 质量评估
 │   │   │   │   ├── Proofreader.java        # 人工校对
-│   │   │   │   └── AnalysisManager.java    # 分析管理
+│   │   │   │   └── AnalysisManager.java    # 分析管理（重构）
 │   │   │   ├── controller/         # REST API控制器
 │   │   │   │   ├── ScriptController.java
 │   │   │   │   └── GlobalExceptionHandler.java
@@ -113,33 +85,83 @@ novel-to-script/
 
 ### 环境要求
 
+**后端：**
 - JDK 17+
 - Maven 3.9+
 
-### 构建项目
+**前端：**
+- Node.js 18+
+- npm 9+
 
+### 前端启动
+
+1. **进入前端目录**
+```bash
+cd novel-to-script/frontend
+```
+
+2. **安装依赖**
+```bash
+npm install
+```
+
+3. **启动开发服务器**
+```bash
+npm run dev
+```
+
+开发服务器将在 `http://localhost:5173` 启动。
+
+4. **构建生产版本**（可选）
+```bash
+npm run build
+```
+构建产物将输出到 `frontend/dist` 目录。
+
+### 后端启动
+
+1. **进入项目根目录**
 ```bash
 cd novel-to-script
+```
+
+2. **构建项目**
+```bash
 mvn clean compile
 ```
 
-### 运行测试
-
+3. **运行测试**
 ```bash
 mvn test
 ```
 
-### 运行应用
-
+4. **启动后端服务**
 ```bash
 mvn spring-boot:run
 ```
+后端服务将在 `http://localhost:8080` 启动。
 
-### 运行命令行界面（CLI）
-
+5. **运行命令行界面（CLI）**
 ```bash
 mvn spring-boot:run -Dspring-boot.run.profiles=cli
 ```
+
+### 完整启动流程（前后端都启动）
+
+**终端 1 - 启动后端：**
+```bash
+cd novel-to-script
+mvn spring-boot:run
+```
+
+**终端 2 - 启动前端：**
+```bash
+cd novel-to-script/frontend
+npm install
+npm run dev
+```
+
+然后在浏览器中打开 `http://localhost:5173` 即可使用！
 
 ### 配置
 
@@ -241,18 +263,28 @@ String response = client.chat("系统提示词", "用户输入");
 boolean connected = client.testConnection();
 ```
 
-### 3. 人物识别（v0.3）
+### 3. 人物识别（v0.3+，v1.4重大改进）
 
 ```java
+// v1.4改进：支持更多格式
 CharacterAnalyzer analyzer = new CharacterAnalyzer();
 List<CharacterAnalyzer.CharacterInfo> characters = analyzer.analyzeCharacters(text);
+// 支持识别：
+// - 张三、李四（标准姓名）
+// - 老张、小李（口语化称呼）
+// - 服务员、风衣男人（职业/特征称呼）
 ```
 
-### 4. 对话提取（v0.3）
+### 4. 对话提取（v0.3+，v1.4重构）
 
 ```java
+// v1.4重构：支持多种对话格式
 DialogueExtractor extractor = new DialogueExtractor();
 List<DialogueExtractor.DialogueInfo> dialogues = extractor.extractDialogues(text);
+// 支持格式：
+// 1. 张三说："你好"
+// 2. "你好"张三说
+// 3. "你好"（继承上一个说话人）
 DialogueExtractor.DialogueStatistics stats = extractor.calculateStatistics(dialogues);
 ```
 
@@ -264,11 +296,15 @@ List<RelationshipAnalyzer.RelationshipInfo> relationships =
     analyzer.analyzeRelationships(text, characterNames);
 ```
 
-### 6. 场景分割（v0.4）
+### 6. 场景分割（v0.4，v1.4优化）
 
 ```java
+// v1.4优化：更适合短文本
 SceneSplitter splitter = new SceneSplitter();
 List<SceneSplitter.SceneInfo> scenes = splitter.splitScenes(text);
+// 改进：
+// - 最小分割间隔从500字降至100字
+// - 即使文本很短也能分割
 ```
 
 ### 7. 情绪标注（v0.4）
@@ -281,7 +317,7 @@ String description = annotator.getEmotionDescription(emotion);
 String emoji = annotator.getEmotionEmoji(emotion);
 ```
 
-### 8. 质量评估（v0.5新增）
+### 8. 质量评估（v0.5）
 
 ```java
 QualityEvaluator evaluator = new QualityEvaluator();
@@ -292,7 +328,7 @@ List<QualityReport.QualityIssue> issues = report.getIssues();
 List<String> suggestions = report.getSuggestions();
 ```
 
-### 9. 人工校对（v0.5新增）
+### 9. 人工校对（v0.5）
 
 ```java
 Proofreader proofreader = new Proofreader();
@@ -304,12 +340,16 @@ proofreader.applyCorrection(correction, script);
 List<Correction> pending = proofreader.getPendingCorrections(scriptId);
 ```
 
-### 10. 完整分析（v0.3+）
+### 10. 完整分析（v0.3+，v1.4重构）
 
 ```java
+// v1.4重构：更好的场景-对话关联
 AnalysisManager manager = new AnalysisManager();
 AnalysisManager.AnalysisResult result = manager.analyze(text);
 Script script = result.getScript();
+// 改进：
+// - 对话真正关联到场景内容
+// - 自动提取动作描述
 ```
 
 ## 使用示例
@@ -339,12 +379,16 @@ mvn test
 
 # 运行特定测试
 mvn test -Dtest=IDGeneratorTest
+
+# 编译测试
+mvn test-compile
 ```
 
 ## 版本历史
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v1.4.0 | 2026-06-07 | **核心算法重构**：人物识别、对话提取、场景分割、分析管理器全部优化，更适合短文本处理 |
 | v1.0.0 | 2026-06-06 | 可视化Web界面 + REST API |
 | v0.5.0 | 2026-06-05 | 质量评估 + 人工校对修正 |
 | v0.4.0 | 2026-06-05 | 场景分割 + 情绪标注 |
@@ -356,6 +400,3 @@ mvn test -Dtest=IDGeneratorTest
 
 MIT License
 
-## 贡献
-
-欢迎提交 Issue 和 Pull Request。
