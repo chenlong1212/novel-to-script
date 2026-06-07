@@ -199,12 +199,13 @@ public class AnalysisManager {
     }
 
     /**
-     * 创建beats
+     * 创建beats - 改进版：真正在场景文本中查找对应的对话
      */
     private List<Beat> createBeatsForScene(SceneInfo sceneInfo,
                                            Map<String, String> nameToId,
                                            List<DialogueInfo> allDialogues) {
         List<Beat> beats = new ArrayList<>();
+        String sceneText = sceneInfo.getRawText();
         
         // 添加舞台指示
         if (sceneInfo.getStageDirections() != null) {
@@ -216,41 +217,79 @@ public class AnalysisManager {
             }
         }
         
-        // 简单处理：添加这个场景相关的对话
-        // 实际项目中应该更精确地匹配对话到场景
-        int startIndex = (sceneInfo.getNumber() - 1) * 10;
-        int endIndex = Math.min(startIndex + 15, allDialogues.size());
-        
-        for (int i = startIndex; i < endIndex && i < allDialogues.size(); i++) {
-            DialogueInfo dialogue = allDialogues.get(i);
-            
-            Beat beat = new Beat();
-            beat.setType(Beat.BeatType.dialogue);
-            beat.setContent(dialogue.getContent());
-            
-            // 使用EmotionAnnotator分析情绪
-            Beat.Emotion emotion = emotionAnnotator.analyzeEmotion(dialogue.getContent());
-            beat.setEmotion(emotion);
-            beat.setIntensity(emotionAnnotator.analyzeIntensity(dialogue.getContent(), emotion));
-            
-            // 查找说话人ID
-            String speakerId = nameToId.get(dialogue.getSpeaker());
-            if (speakerId != null) {
-                beat.setSpeaker(speakerId);
+        // 查找在当前场景文本中出现的对话
+        for (DialogueInfo dialogue : allDialogues) {
+            // 检查对话内容是否在场景文本中
+            if (sceneText != null && dialogue.getContent() != null && 
+                sceneText.contains(dialogue.getContent())) {
+                
+                Beat beat = new Beat();
+                beat.setType(Beat.BeatType.dialogue);
+                beat.setContent(dialogue.getContent());
+                
+                // 使用EmotionAnnotator分析情绪
+                Beat.Emotion emotion = emotionAnnotator.analyzeEmotion(dialogue.getContent());
+                beat.setEmotion(emotion);
+                beat.setIntensity(emotionAnnotator.analyzeIntensity(dialogue.getContent(), emotion));
+                
+                // 查找说话人ID
+                String speakerId = nameToId.get(dialogue.getSpeaker());
+                if (speakerId != null) {
+                    beat.setSpeaker(speakerId);
+                }
+                
+                beats.add(beat);
             }
-            
-            beats.add(beat);
         }
         
-        // 如果没有对话，添加一个叙述
+        // 如果没有找到对话，添加叙述
         if (beats.isEmpty()) {
-            Beat beat = new Beat();
-            beat.setType(Beat.BeatType.narration);
-            beat.setContent(sceneInfo.getDescription().substring(0, Math.min(200, sceneInfo.getDescription().length())));
-            beats.add(beat);
+            // 先尝试添加一些动作描述
+            List<String> actionDescriptions = extractActionDescriptions(sceneText);
+            for (String action : actionDescriptions) {
+                Beat beat = new Beat();
+                beat.setType(Beat.BeatType.action);
+                beat.setContent(action);
+                beats.add(beat);
+            }
+            
+            // 如果还是空，添加默认叙述
+            if (beats.isEmpty()) {
+                Beat beat = new Beat();
+                beat.setType(Beat.BeatType.narration);
+                String desc = sceneInfo.getDescription() != null 
+                    ? sceneInfo.getDescription() 
+                    : (sceneText != null ? sceneText.substring(0, Math.min(200, sceneText.length())) : "场景描述");
+                beat.setContent(desc);
+                beats.add(beat);
+            }
         }
         
         return beats;
+    }
+    
+    /**
+     * 从场景文本中提取动作描述
+     */
+    private List<String> extractActionDescriptions(String text) {
+        List<String> actions = new ArrayList<>();
+        if (text == null) return actions;
+        
+        String[] lines = text.split("\n");
+        for (String line : lines) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            
+            // 不是对话的行可能是动作描述
+            if (!line.contains("\"") && !line.contains("\"") && 
+                !line.contains("「") && !line.contains("」")) {
+                if (line.length() > 5 && line.length() < 200) {
+                    actions.add(line);
+                }
+            }
+        }
+        
+        return actions;
     }
 
     /**
